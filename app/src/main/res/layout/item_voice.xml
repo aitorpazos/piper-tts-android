@@ -15,6 +15,7 @@
         android:layout_height="wrap_content"
         android:padding="12dp">
 
+        <!-- Language / country -->
         <TextView
             android:id="@+id/tvLanguage"
             android:layout_width="0dp"
@@ -23,9 +24,22 @@
             android:textStyle="bold"
             android:textColor="?android:textColorPrimary"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintEnd_toStartOf="@id/btnAction"
+            app:layout_constraintEnd_toStartOf="@id/chipQuality"
             app:layout_constraintTop_toTopOf="parent" />
 
+        <!-- Quality badge -->
+        <com.google.android.material.chip.Chip
+            android:id="@+id/chipQuality"
+            style="@style/Widget.MaterialComponents.Chip.Action"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:clickable="false"
+            android:textSize="11sp"
+            app:chipMinHeight="24dp"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
+        <!-- Voice name / native language / speakers -->
         <TextView
             android:id="@+id/tvVoiceName"
             android:layout_width="0dp"
@@ -34,42 +48,63 @@
             android:textSize="13sp"
             android:textColor="?android:textColorSecondary"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintEnd_toStartOf="@id/btnAction"
+            app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintTop_toBottomOf="@id/tvLanguage" />
 
+        <!-- Model size -->
         <TextView
-            android:id="@+id/tvDetails"
+            android:id="@+id/tvSize"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_marginTop="2dp"
             android:textSize="12sp"
             android:textColor="?android:textColorTertiary"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintEnd_toStartOf="@id/btnAction"
+            app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintTop_toBottomOf="@id/tvVoiceName" />
 
+        <!-- Download progress bar -->
         <ProgressBar
-            android:id="@+id/progressBar"
+            android:id="@+id/progressDownload"
             style="@android:style/Widget.ProgressBar.Horizontal"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_marginTop="4dp"
-            android:visibility="gone"
             android:max="100"
+            android:visibility="gone"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintEnd_toStartOf="@id/btnAction"
-            app:layout_constraintTop_toBottomOf="@id/tvDetails" />
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/tvSize" />
 
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btnAction"
-            style="@style/Widget.MaterialComponents.Button.TextButton"
+        <!-- Button row -->
+        <LinearLayout
+            android:id="@+id/buttonRow"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:minWidth="90dp"
-            android:textSize="13sp"
+            android:layout_marginTop="4dp"
+            android:orientation="horizontal"
             app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintTop_toTopOf="parent"
-            app:layout_constraintBottom_toBottomOf="parent" />
+            app:layout_constraintTop_toBottomOf="@id/progressDownload">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnDelete"
+                style="@style/Widget.MaterialComponents.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/btn_delete"
+                android:textSize="13sp"
+                android:visibility="gone" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnDownload"
+                style="@style/Widget.MaterialComponents.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:minWidth="90dp"
+                android:text="@string/btn_download"
+                android:textSize="13sp" />
+
+        </LinearLayout>
 
     </androidx.constraintlayout.widget.ConstraintLayout>
 
