@@ -66,4 +66,6 @@ Download voices from: https://huggingface.co/rhasspy/piper-voices
 
 ## License
 
-MIT License. Piper voices have their own licenses (see the Piper project).
+This project is licensed under the [GNU General Public License v3.0](LICENSE).
+
+Piper voice models have their own licenses — see the [Piper project](https://github.com/rhasspy/piper) for details.
