@@ -8,6 +8,7 @@
 -keepattributes Signature
 -keepattributes *Annotation*
 -keep class com.aitorpazos.pipertts.model.** { *; }
+-keep class com.aitorpazos.pipertts.download.VoiceDownloadManager$* { *; }
 
 # Keep TTS Service
 -keep class com.aitorpazos.pipertts.service.PiperTtsService { *; }
