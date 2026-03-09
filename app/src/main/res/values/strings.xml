@@ -9,4 +9,21 @@
     <string name="status_ready">Ready. Enter text and tap Speak.</string>
     <string name="tts_settings_title">Piper TTS Settings</string>
     <string name="tts_settings_description">Configure voice model, speed, and pitch for the Piper TTS engine. Additional voices can be downloaded from the Piper project.</string>
+
+    <!-- Voice list / download manager -->
+    <string name="voice_manager_title">Voice Manager</string>
+    <string name="voice_search_hint">Search voices…</string>
+    <string name="filter_all">All</string>
+    <string name="filter_installed">Installed</string>
+    <string name="filter_available">Available</string>
+    <string name="loading_catalog">Loading voice catalog…</string>
+    <string name="catalog_status">%1$d voices · %2$d languages · %3$d installed</string>
+    <string name="catalog_error">Failed to load catalog: %1$s</string>
+    <string name="empty_voice_list">No voices match your search.</string>
+    <string name="delete_voice_title">Delete voice?</string>
+    <string name="delete_voice_message">Remove %1$s — %2$s from this device?</string>
+    <string name="btn_delete">Delete</string>
+    <string name="btn_download">Download</string>
+    <string name="btn_downloading">Downloading…</string>
+    <string name="btn_installed">Installed</string>
 </resources>
