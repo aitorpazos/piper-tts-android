@@ -29,14 +29,9 @@ android {
                 storePassword = System.getenv("KEYSTORE_PASSWORD")
                 keyAlias = System.getenv("KEY_ALIAS")
                 keyPassword = System.getenv("KEY_PASSWORD")
-            } else {
-                // Fall back to debug signing for unsigned release builds (CI without keystore)
-                val debugKeystore = signingConfigs.getByName("debug")
-                storeFile = debugKeystore.storeFile
-                storePassword = debugKeystore.storePassword
-                keyAlias = debugKeystore.keyAlias
-                keyPassword = debugKeystore.keyPassword
             }
+            // If no keystore env vars, release signingConfig has no storeFile.
+            // buildTypes.release will fall back to debug signing below.
         }
     }
 
@@ -44,7 +39,13 @@ android {
         release {
             isMinifyEnabled = true
             isShrinkResources = true
-            signingConfig = signingConfigs.getByName("release")
+            // Use release keystore if configured, otherwise fall back to debug signing
+            val releaseConfig = signingConfigs.getByName("release")
+            signingConfig = if (releaseConfig.storeFile?.exists() == true) {
+                releaseConfig
+            } else {
+                signingConfigs.getByName("debug")
+            }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
