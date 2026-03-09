@@ -1,0 +1,208 @@
+package com.aitorpazos.pipertts.util
+
+import android.content.Context
+import android.util.Log
+import com.aitorpazos.pipertts.model.PiperVoiceConfig
+import com.google.gson.Gson
+import java.io.File
+import java.util.Locale
+
+/**
+ * Manages Piper voice models — loading from assets or external storage.
+ *
+ * Voice models consist of:
+ * - A .onnx model file
+ * - A .onnx.json config file
+ *
+ * Default voice is bundled in assets/voices/
+ * Additional voices can be downloaded to app's files directory.
+ */
+class VoiceManager(private val context: Context) {
+
+    companion object {
+        private const val TAG = "VoiceManager"
+        private const val VOICES_ASSET_DIR = "voices"
+        private const val VOICES_EXTERNAL_DIR = "voices"
+    }
+
+    private val gson = Gson()
+
+    data class VoiceData(
+        val config: PiperVoiceConfig,
+        val modelBytes: ByteArray,
+        val locale: Locale,
+        val name: String
+    )
+
+    data class VoiceInfo(
+        val name: String,
+        val locale: Locale,
+        val quality: String,
+        val isAsset: Boolean,
+        val modelPath: String,
+        val configPath: String
+    )
+
+    /**
+     * List all available voices (from assets and external storage).
+     */
+    fun listVoices(): List<VoiceInfo> {
+        val voices = mutableListOf<VoiceInfo>()
+
+        // Check assets
+        try {
+            val assetFiles = context.assets.list(VOICES_ASSET_DIR) ?: emptyArray()
+            val onnxFiles = assetFiles.filter { it.endsWith(".onnx") && !it.endsWith(".onnx.json") }
+
+            for (onnxFile in onnxFiles) {
+                val configFile = "$onnxFile.json"
+                if (configFile in assetFiles) {
+                    try {
+                        val configJson = context.assets.open("$VOICES_ASSET_DIR/$configFile")
+                            .bufferedReader().use { it.readText() }
+                        val config = gson.fromJson(configJson, PiperVoiceConfig::class.java)
+                        val locale = parseLocaleFromVoiceName(onnxFile, config)
+                        voices.add(
+                            VoiceInfo(
+                                name = onnxFile.removeSuffix(".onnx"),
+                                locale = locale,
+                                quality = config.audio.quality ?: "medium",
+                                isAsset = true,
+                                modelPath = "$VOICES_ASSET_DIR/$onnxFile",
+                                configPath = "$VOICES_ASSET_DIR/$configFile"
+                            )
+                        )
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Failed to parse voice config: $configFile", e)
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to list asset voices", e)
+        }
+
+        // Check external storage
+        val externalDir = File(context.filesDir, VOICES_EXTERNAL_DIR)
+        if (externalDir.exists()) {
+            val onnxFiles = externalDir.listFiles { f -> f.extension == "onnx" } ?: emptyArray()
+            for (onnxFile in onnxFiles) {
+                val configFile = File("${onnxFile.absolutePath}.json")
+                if (configFile.exists()) {
+                    try {
+                        val config = gson.fromJson(configFile.readText(), PiperVoiceConfig::class.java)
+                        val locale = parseLocaleFromVoiceName(onnxFile.name, config)
+                        voices.add(
+                            VoiceInfo(
+                                name = onnxFile.nameWithoutExtension,
+                                locale = locale,
+                                quality = config.audio.quality ?: "medium",
+                                isAsset = false,
+                                modelPath = onnxFile.absolutePath,
+                                configPath = configFile.absolutePath
+                            )
+                        )
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Failed to parse voice config: ${configFile.name}", e)
+                    }
+                }
+            }
+        }
+
+        return voices
+    }
+
+    /**
+     * Check if a voice is available for the given locale.
+     */
+    fun hasVoiceForLocale(locale: Locale): Boolean {
+        return listVoices().any { it.locale.language == locale.language }
+    }
+
+    /**
+     * Check if a voice is available for the given language code.
+     */
+    fun hasVoiceForLanguage(lang: String): Boolean {
+        val locale = Locale(lang)
+        return hasVoiceForLocale(locale)
+    }
+
+    /**
+     * Load a voice model for the given locale.
+     */
+    fun loadVoice(locale: Locale): VoiceData? {
+        val voices = listVoices()
+
+        // Find best match: exact locale > language match > default (English)
+        val voice = voices.find { it.locale.language == locale.language && it.locale.country == locale.country }
+            ?: voices.find { it.locale.language == locale.language }
+            ?: voices.find { it.locale.language == "en" }
+            ?: voices.firstOrNull()
+            ?: return null
+
+        return loadVoiceByInfo(voice)
+    }
+
+    /**
+     * Load a specific voice by name.
+     */
+    fun loadVoiceByName(name: String): VoiceData? {
+        val voice = listVoices().find { it.name == name } ?: return null
+        return loadVoiceByInfo(voice)
+    }
+
+    private fun loadVoiceByInfo(voice: VoiceInfo): VoiceData? {
+        try {
+            val configJson: String
+            val modelBytes: ByteArray
+
+            if (voice.isAsset) {
+                configJson = context.assets.open(voice.configPath)
+                    .bufferedReader().use { it.readText() }
+                modelBytes = context.assets.open(voice.modelPath)
+                    .use { it.readBytes() }
+            } else {
+                configJson = File(voice.configPath).readText()
+                modelBytes = File(voice.modelPath).readBytes()
+            }
+
+            val config = gson.fromJson(configJson, PiperVoiceConfig::class.java)
+
+            Log.i(TAG, "Loaded voice: ${voice.name} (${voice.locale}, ${modelBytes.size} bytes)")
+            return VoiceData(
+                config = config,
+                modelBytes = modelBytes,
+                locale = voice.locale,
+                name = voice.name
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to load voice: ${voice.name}", e)
+            return null
+        }
+    }
+
+    private fun parseLocaleFromVoiceName(filename: String, config: PiperVoiceConfig): Locale {
+        // Try to extract locale from espeak voice config
+        config.espeak?.voice?.let { espeakVoice ->
+            val parts = espeakVoice.split("-")
+            if (parts.size >= 2) {
+                return Locale(parts[0], parts[1].uppercase())
+            }
+            if (parts.isNotEmpty()) {
+                return Locale(parts[0])
+            }
+        }
+
+        // Try to extract from filename (e.g., "en_US-lessac-medium")
+        val match = Regex("^([a-z]{2})_([A-Z]{2})").find(filename)
+        if (match != null) {
+            return Locale(match.groupValues[1], match.groupValues[2])
+        }
+
+        val langMatch = Regex("^([a-z]{2})[-_]").find(filename)
+        if (langMatch != null) {
+            return Locale(langMatch.groupValues[1])
+        }
+
+        return Locale.US
+    }
+}
