@@ -11,8 +11,8 @@ android {
         applicationId = "com.aitorpazos.pipertts"
         minSdk = 24
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "1.1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -91,10 +91,14 @@ android {
 // Assign distinct version codes per ABI split so Play Store accepts all APKs
 val abiVersionCodes = mapOf("armeabi-v7a" to 1, "arm64-v8a" to 2, "x86_64" to 3)
 android.applicationVariants.all {
-    outputs.filterIsInstance<com.android.build.gradle.api.ApkVariantOutput>().forEach { output ->
-        @Suppress("DEPRECATION")
-        val abi = output.getFilter(com.android.build.VariantOutput.FilterType.ABI)
-        output.versionCodeOverride = (abiVersionCodes[abi] ?: 0) * 1000 + (android.defaultConfig.versionCode ?: 1)
+    outputs.forEach { output ->
+        if (output is com.android.build.gradle.api.ApkVariantOutput) {
+            val abiName = output.filters.find {
+                it.filterType == com.android.build.VariantOutput.FilterType.ABI.name
+            }?.identifier
+            output.versionCodeOverride =
+                (abiVersionCodes[abiName] ?: 0) * 1000 + (android.defaultConfig.versionCode ?: 1)
+        }
     }
 }
 
