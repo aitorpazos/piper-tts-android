@@ -1,0 +1,21 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Speech bubble icon -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,28 C38.5,28 26,38.5 26,51.5 C26,58.5 29.5,64.8 35,69 L35,80 L46,73 C48.6,73.7 51.3,74 54,74 C69.5,74 82,63.5 82,51 C82,38.5 69.5,28 54,28 Z" />
+    <!-- Sound waves -->
+    <path
+        android:fillColor="#BBDEFB"
+        android:pathData="M60,45 Q65,51 60,57"
+        android:strokeWidth="2.5"
+        android:strokeColor="#BBDEFB" />
+    <path
+        android:fillColor="#BBDEFB"
+        android:pathData="M66,40 Q74,51 66,62"
+        android:strokeWidth="2.5"
+        android:strokeColor="#90CAF9" />
+</vector>
