@@ -58,7 +58,8 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="2dp"
             android:textSize="12sp"
-            android:textColor="?android:textColorTertiary"
+            android:textColor="?android:textColorSecondary"
+            android:alpha="0.7"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintTop_toBottomOf="@id/tvVoiceName" />
@@ -66,7 +67,7 @@
         <!-- Download progress bar -->
         <ProgressBar
             android:id="@+id/progressDownload"
-            style="@android:style/Widget.ProgressBar.Horizontal"
+            style="?android:attr/progressBarStyleHorizontal"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_marginTop="4dp"
