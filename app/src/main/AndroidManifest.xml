@@ -23,6 +23,12 @@
             </intent-filter>
         </activity>
 
+        <!-- Voice Manager activity -->
+        <activity
+            android:name=".ui.VoiceListActivity"
+            android:exported="false"
+            android:label="@string/voice_manager_title" />
+
         <!-- TTS Engine Settings activity (launched from system TTS settings) -->
         <activity
             android:name=".ui.TtsSettingsActivity"

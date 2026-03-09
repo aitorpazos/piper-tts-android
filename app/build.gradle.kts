@@ -11,18 +11,13 @@ android {
         applicationId = "com.aitorpazos.pipertts"
         minSdk = 24
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "1.1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         ndk {
-            val abiFilter: String? = project.findProperty("abi.filter") as String?
-            if (abiFilter != null) {
-                abiFilters += listOf(abiFilter)
-            } else {
-                abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
-            }
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
         }
     }
 
@@ -73,6 +68,16 @@ android {
         viewBinding = true
     }
 
+    // ABI splits — produce per-architecture APKs for smaller downloads
+    splits {
+        abi {
+            isEnable = project.findProperty("abi.splits.enable")?.toString()?.toBoolean() ?: false
+            reset()
+            include("arm64-v8a", "armeabi-v7a", "x86_64")
+            isUniversalApk = true
+        }
+    }
+
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
@@ -80,6 +85,15 @@ android {
         jniLibs {
             useLegacyPackaging = true
         }
+    }
+}
+
+// Assign distinct version codes per ABI split so Play Store accepts all APKs
+val abiVersionCodes = mapOf("armeabi-v7a" to 1, "arm64-v8a" to 2, "x86_64" to 3)
+android.applicationVariants.all {
+    outputs.filterIsInstance<com.android.build.gradle.api.ApkVariantOutput>().forEach { output ->
+        val abi = output.getFilter(com.android.build.api.variant.FilterConfiguration.FilterType.ABI.name)
+        output.versionCodeOverride = (abiVersionCodes[abi] ?: 0) * 1000 + (android.defaultConfig.versionCode ?: 1)
     }
 }
 
