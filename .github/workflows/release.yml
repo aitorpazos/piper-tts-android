@@ -51,6 +51,21 @@ jobs:
               -dname "CN=Android Debug,O=Android,C=US"
           fi
 
+      - name: Ensure debug keystore exists
+        run: |
+          KEYSTORE_DIR="$HOME/.android"
+          KEYSTORE_FILE="$KEYSTORE_DIR/debug.keystore"
+          if [ ! -f "$KEYSTORE_FILE" ]; then
+            mkdir -p "$KEYSTORE_DIR"
+            keytool -genkeypair -v \
+              -keystore "$KEYSTORE_FILE" \
+              -storepass android \
+              -alias androiddebugkey \
+              -keypass android \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -dname "CN=Android Debug,O=Android,C=US"
+          fi
+
       - name: Build release APKs with ABI splits
         run: ./gradlew assembleRelease -Pabi.splits.enable=true
 
@@ -77,6 +92,15 @@ jobs:
       - name: List release artifacts
         run: ls -lh release-apks/
 
+      # Build Android App Bundle (AAB) for Play Store
+      - name: Build release App Bundle (AAB)
+        run: ./gradlew bundleRelease
+
+      - name: Collect AAB
+        run: |
+          cp app/build/outputs/bundle/release/*.aab release-apks/piper-tts.aab 2>/dev/null || echo "No AAB produced"
+          ls -lh release-apks/
+
       - name: Extract version from tag
         id: version
         run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
@@ -86,17 +110,20 @@ jobs:
         with:
           name: "Piper TTS Android v${{ steps.version.outputs.VERSION }}"
           generate_release_notes: true
-          files: release-apks/piper-tts-*.apk
+          files: release-apks/*
           body: |
             ## Piper TTS Android v${{ steps.version.outputs.VERSION }}
             
             Offline text-to-speech for Android powered by [Piper](https://github.com/rhasspy/piper).
             
-            ### APK Downloads
-            - **piper-tts-universal.apk** — All architectures (largest, works everywhere)
-            - **piper-tts-arm64-v8a.apk** — 64-bit ARM (most modern phones)
-            - **piper-tts-armeabi-v7a.apk** — 32-bit ARM (older devices)
-            - **piper-tts-x86_64.apk** — x86_64 (emulators, Chromebooks)
+            ### Downloads
+            | File | Architecture | Notes |
+            |------|-------------|-------|
+            | `piper-tts-arm64-v8a.apk` | 64-bit ARM | Most modern phones — **recommended** |
+            | `piper-tts-armeabi-v7a.apk` | 32-bit ARM | Older devices |
+            | `piper-tts-x86_64.apk` | x86_64 | Emulators, Chromebooks |
+            | `piper-tts-universal.apk` | All | Largest, works everywhere |
+            | `piper-tts.aab` | All | Android App Bundle (for Play Store) |
             
             ### Installation
             1. Download the APK for your device architecture (or universal)
