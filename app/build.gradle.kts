@@ -93,7 +93,7 @@ val abiVersionCodes = mapOf("armeabi-v7a" to 1, "arm64-v8a" to 2, "x86_64" to 3)
 android.applicationVariants.all {
     outputs.filterIsInstance<com.android.build.gradle.api.ApkVariantOutput>().forEach { output ->
         @Suppress("DEPRECATION")
-        val abi = output.getFilter(com.android.build.OutputFile.ABI)
+        val abi = output.getFilter(com.android.build.VariantOutput.FilterType.ABI)
         output.versionCodeOverride = (abiVersionCodes[abi] ?: 0) * 1000 + (android.defaultConfig.versionCode ?: 1)
     }
 }
