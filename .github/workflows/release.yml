@@ -30,34 +30,52 @@ jobs:
         run: ./gradlew testDebugUnitTest
 
       - name: Decode keystore (if available)
-        if: ${{ secrets.KEYSTORE_BASE64 != '' }}
+        if: env.KEYSTORE_BASE64 != ''
         env:
           KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
         run: |
           echo "$KEYSTORE_BASE64" | base64 -d > ${{ github.workspace }}/release.keystore
 
       - name: Set signing env (if keystore available)
-        if: ${{ secrets.KEYSTORE_BASE64 != '' }}
+        if: env.KEYSTORE_BASE64 != ''
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
         run: |
           echo "KEYSTORE_FILE=${{ github.workspace }}/release.keystore" >> $GITHUB_ENV
           echo "KEYSTORE_PASSWORD=${{ secrets.KEYSTORE_PASSWORD }}" >> $GITHUB_ENV
           echo "KEY_ALIAS=${{ secrets.KEY_ALIAS }}" >> $GITHUB_ENV
           echo "KEY_PASSWORD=${{ secrets.KEY_PASSWORD }}" >> $GITHUB_ENV
 
-      - name: Build universal APK
-        run: ./gradlew assembleRelease
+      # Build per-ABI split APKs + universal APK in one pass
+      - name: Build release APKs (ABI splits)
+        run: ./gradlew assembleRelease -Pabi.splits.enable=true
 
-      - name: Rename universal APK
+      - name: Collect APKs
         run: |
-          mkdir -p release-apks
-          cp app/build/outputs/apk/release/*.apk release-apks/piper-tts-universal.apk
-
-      - name: Build per-ABI APKs
-        run: |
-          for ABI in arm64-v8a armeabi-v7a x86_64; do
-            ./gradlew clean assembleRelease -Pabi.filter="$ABI"
-            cp app/build/outputs/apk/release/*.apk "release-apks/piper-tts-${ABI}.apk"
+          mkdir -p release-artifacts
+          APK_DIR=app/build/outputs/apk/release
+          # Rename split APKs for clarity
+          for apk in "$APK_DIR"/*.apk; do
+            name=$(basename "$apk")
+            case "$name" in
+              *universal*) cp "$apk" release-artifacts/piper-tts-universal.apk ;;
+              *arm64*)     cp "$apk" release-artifacts/piper-tts-arm64-v8a.apk ;;
+              *armeabi*)   cp "$apk" release-artifacts/piper-tts-armeabi-v7a.apk ;;
+              *x86_64*)    cp "$apk" release-artifacts/piper-tts-x86_64.apk ;;
+              *)           cp "$apk" "release-artifacts/$name" ;;
+            esac
           done
+          ls -lh release-artifacts/
+
+      # Build Android App Bundle (AAB) for Play Store
+      - name: Build release App Bundle (AAB)
+        run: ./gradlew bundleRelease
+
+      - name: Collect AAB
+        run: |
+          AAB_DIR=app/build/outputs/bundle/release
+          cp "$AAB_DIR"/*.aab release-artifacts/piper-tts.aab
+          ls -lh release-artifacts/
 
       - name: Extract version from tag
         id: version
@@ -68,17 +86,20 @@ jobs:
         with:
           name: "Piper TTS Android v${{ steps.version.outputs.VERSION }}"
           generate_release_notes: true
-          files: release-apks/piper-tts-*.apk
+          files: release-artifacts/*
           body: |
             ## Piper TTS Android v${{ steps.version.outputs.VERSION }}
             
             Offline text-to-speech for Android powered by [Piper](https://github.com/rhasspy/piper).
             
             ### APK Downloads
-            - **piper-tts-universal.apk** — All architectures (largest, works everywhere)
-            - **piper-tts-arm64-v8a.apk** — 64-bit ARM (most modern phones)
-            - **piper-tts-armeabi-v7a.apk** — 32-bit ARM (older devices)
-            - **piper-tts-x86_64.apk** — x86_64 (emulators, Chromebooks)
+            | File | Architecture | Notes |
+            |------|-------------|-------|
+            | `piper-tts-arm64-v8a.apk` | 64-bit ARM | Most modern phones — **recommended** |
+            | `piper-tts-armeabi-v7a.apk` | 32-bit ARM | Older devices |
+            | `piper-tts-x86_64.apk` | x86_64 | Emulators, Chromebooks |
+            | `piper-tts-universal.apk` | All | Largest, works everywhere |
+            | `piper-tts.aab` | All | Android App Bundle (for Play Store) |
             
             ### Installation
             1. Download the APK for your device architecture (or universal)
