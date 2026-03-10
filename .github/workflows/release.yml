@@ -14,8 +14,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-        with:
-          lfs: true
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -101,8 +99,5 @@ jobs:
             ### Installation
             1. Download the APK for your device architecture (or universal)
             2. Install the APK
-            3. Go to **Settings → Text-to-Speech** and select **Piper TTS**
-            4. Open the app to browse and download additional voices
-            
-            ### Bundled Voice
-            - en_US-amy-low (English US, ~60MB)
+            3. Open the app and tap **Manage** to download a voice
+            4. Go to **Settings → Text-to-Speech** and select **Piper TTS**
