@@ -45,7 +45,7 @@ data class PiperVoiceConfig(
             val audioObj = obj.getJSONObject("audio")
             val audio = AudioConfig(
                 sampleRate = audioObj.optInt("sample_rate", 22050),
-                quality = audioObj.optString("quality", null)
+                quality = if (audioObj.has("quality")) audioObj.getString("quality") else null
             )
 
             val espeak = if (obj.has("espeak")) {
@@ -67,7 +67,7 @@ data class PiperVoiceConfig(
                 map
             } else null
 
-            val phonemeType = obj.optString("phoneme_type", null)
+            val phonemeType = if (obj.has("phoneme_type")) obj.getString("phoneme_type") else null
 
             val phonemeIdMap = if (obj.has("phoneme_id_map")) {
                 val m = obj.getJSONObject("phoneme_id_map")
