@@ -155,8 +155,9 @@ class PiperTtsService : TextToSpeechService() {
 
     /**
      * Return the default voice name for the given locale.
+     * Note: Not overriding TextToSpeechService method — called from onGetVoices/onLoadLanguage.
      */
-    public override fun onGetDefaultVoiceNameForLocale(lang: String, country: String, variant: String): String {
+    private fun getDefaultVoiceNameForLocale(lang: String, country: String, variant: String): String {
         val locale = Locale(lang, country, variant)
         val voices = voiceManager.listVoices()
 
