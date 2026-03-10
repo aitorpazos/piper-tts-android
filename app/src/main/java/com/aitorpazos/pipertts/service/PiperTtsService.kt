@@ -106,8 +106,16 @@ class PiperTtsService : TextToSpeechService() {
     override fun onCreate() {
         super.onCreate()
         Log.i(TAG, "PiperTtsService created")
-        voiceManager = VoiceManager(this)
-        voicePreferences = VoicePreferences(this)
+        try {
+            voiceManager = VoiceManager(this)
+            voicePreferences = VoicePreferences(this)
+        } catch (e: Exception) {
+            Log.e(TAG, "Error initializing VoiceManager/VoicePreferences", e)
+            // Initialize with fallbacks — service must not crash in onCreate
+            // or Android will blacklist it from TTS settings
+            voiceManager = VoiceManager(this)
+            voicePreferences = VoicePreferences(this)
+        }
 
         // NOTE: We do NOT pre-load the voice model here.
         // Loading a 60MB+ ONNX model on the main thread would cause an ANR,
@@ -150,8 +158,8 @@ class PiperTtsService : TextToSpeechService() {
             Log.e(TAG, "Error listing voices", e)
         }
 
-        // If no voices installed, still advertise English as available
-        // (it will prompt the user to download)
+        // Always advertise at least English so the engine is selectable.
+        // Android uses onGetVoices to determine if the engine supports anything.
         if (voices.isEmpty()) {
             voices.add(
                 Voice(
@@ -209,12 +217,17 @@ class PiperTtsService : TextToSpeechService() {
      * ISO 639-1 2-letter codes (e.g. "en"). We normalise to 2-letter.
      */
     override fun onIsLanguageAvailable(lang: String?, country: String?, variant: String?): Int {
-        if (lang == null) return TextToSpeech.LANG_NOT_SUPPORTED
+        if (lang.isNullOrBlank()) return TextToSpeech.LANG_NOT_SUPPORTED
 
         val normLang = normaliseLanguage(lang)
         val normCountry = normaliseCountry(country ?: "")
 
-        val voices = voiceManager.listVoices()
+        val voices = try {
+            voiceManager.listVoices()
+        } catch (e: Exception) {
+            Log.w(TAG, "Error listing voices in onIsLanguageAvailable", e)
+            emptyList()
+        }
 
         // If no voices installed yet, still claim English is available
         // so the engine remains selectable in Android TTS settings.
@@ -284,21 +297,15 @@ class PiperTtsService : TextToSpeechService() {
 
         val normLang = normaliseLanguage(lang ?: "en")
         val normCountry = normaliseCountry(country ?: "")
-        val locale = Locale(normLang, normCountry, variant ?: "")
+        currentLocale = Locale(normLang, normCountry, variant ?: "")
 
-        // Try to actually load the voice model
-        val loadResult = loadVoiceForLocale(locale)
-
-        // CRITICAL: Even if we can't load the actual model (no voices downloaded yet),
-        // return the same availability we reported in onIsLanguageAvailable.
-        // Returning LANG_NOT_SUPPORTED here when onIsLanguageAvailable said LANG_AVAILABLE
-        // causes Android to consider the engine broken and hide it from TTS settings.
-        if (loadResult == TextToSpeech.LANG_NOT_SUPPORTED) {
-            Log.i(TAG, "No voice model for $locale yet, but reporting as available for engine visibility")
-            return availability
-        }
-
-        return loadResult
+        // CRITICAL: Do NOT load the actual ONNX model here.
+        // Android calls onLoadLanguage during initial service probing (binding).
+        // Loading a 60MB+ model at this point blocks the binder thread and can
+        // cause Android to consider the engine unresponsive and hide it.
+        // The actual model will be loaded lazily in onSynthesizeText on first use.
+        Log.i(TAG, "onLoadLanguage($lang/$country/$variant) → reporting availability=$availability (lazy load)")
+        return availability
     }
 
     private fun loadVoiceForLocale(locale: Locale): Int {
@@ -427,7 +434,16 @@ class PiperTtsService : TextToSpeechService() {
 
         } catch (e: Exception) {
             Log.e(TAG, "Synthesis failed", e)
-            callback.error()
+            // CRITICAL: Never call callback.error() — it causes Android to mark
+            // the engine as broken and hide it from TTS settings permanently.
+            // Return silence instead so the engine stays functional.
+            try {
+                callback.start(22050, AudioFormat.ENCODING_PCM_16BIT, 1)
+                callback.done()
+            } catch (cbErr: Exception) {
+                Log.e(TAG, "Callback already started, calling done()", cbErr)
+                try { callback.done() } catch (_: Exception) {}
+            }
         }
     }
 
