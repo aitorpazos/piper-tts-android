@@ -46,6 +46,54 @@ class PiperTtsService : TextToSpeechService() {
 
     companion object {
         private const val TAG = "PiperTtsService"
+
+        /**
+         * Map ISO 639-2/T (3-letter) codes that Android may pass to ISO 639-1 (2-letter).
+         * Android's TTS framework sometimes sends 3-letter codes (e.g., "eng", "spa").
+         */
+        private val ISO3_TO_ISO1 = buildIso3Map()
+
+        private fun buildIso3Map(): Map<String, String> {
+            val map = mutableMapOf<String, String>()
+            for (loc in Locale.getAvailableLocales()) {
+                try {
+                    val iso3 = loc.isO3Language
+                    val iso1 = loc.language
+                    if (iso3.isNotEmpty() && iso1.isNotEmpty() && iso3.length == 3 && iso1.length == 2) {
+                        map[iso3] = iso1
+                    }
+                } catch (_: Exception) {
+                    // Some locales throw MissingResourceException for getISO3Language
+                }
+            }
+            return map
+        }
+
+        /**
+         * Normalise a language code to 2-letter ISO 639-1.
+         * Accepts "en", "eng", "en-us", "en_US", etc.
+         */
+        fun normaliseLanguage(lang: String): String {
+            val lower = lang.lowercase().replace('-', '_')
+            // Already 2-letter
+            if (lower.length == 2) return lower
+            // 3-letter ISO 639-2/T
+            if (lower.length == 3) return ISO3_TO_ISO1[lower] ?: lower
+            // "en_us" style
+            val parts = lower.split('_')
+            if (parts.isNotEmpty()) {
+                val first = parts[0]
+                if (first.length == 2) return first
+                if (first.length == 3) return ISO3_TO_ISO1[first] ?: first
+            }
+            return lower
+        }
+
+        fun normaliseCountry(country: String): String {
+            val upper = country.uppercase()
+            if (upper.length <= 3) return upper
+            return upper
+        }
     }
 
     private var engine: PiperEngine? = null
@@ -90,17 +138,11 @@ class PiperTtsService : TextToSpeechService() {
                     else -> Voice.QUALITY_NORMAL
                 }
 
-                val latency = if (pv.isAsset) {
-                    Voice.LATENCY_NORMAL
-                } else {
-                    Voice.LATENCY_NORMAL
-                }
-
                 val voice = Voice(
                     pv.name,                              // unique name
                     pv.locale,                            // locale
                     quality,                              // quality
-                    latency,                              // latency
+                    Voice.LATENCY_NORMAL,                 // latency
                     false,                                // requiresNetworkConnection
                     features                              // features set
                 )
@@ -154,30 +196,26 @@ class PiperTtsService : TextToSpeechService() {
     }
 
     /**
-     * Return the default voice name for the given locale.
-     * Note: Not overriding TextToSpeechService method — called from onGetVoices/onLoadLanguage.
+     * Check if a language is available.
+     *
+     * Android may pass ISO 639-2/T 3-letter codes (e.g. "eng") or
+     * ISO 639-1 2-letter codes (e.g. "en"). We normalise to 2-letter.
      */
-    private fun getDefaultVoiceNameForLocale(lang: String, country: String, variant: String): String {
-        val locale = Locale(lang, country, variant)
-        val voices = voiceManager.listVoices()
-
-        val match = voices.find { it.locale.language == locale.language && it.locale.country == locale.country }
-            ?: voices.find { it.locale.language == locale.language }
-            ?: voices.find { it.locale.language == "en" }
-            ?: voices.firstOrNull()
-
-        return match?.name ?: "en-us-default"
-    }
-
     override fun onIsLanguageAvailable(lang: String?, country: String?, variant: String?): Int {
         if (lang == null) return TextToSpeech.LANG_NOT_SUPPORTED
 
-        val locale = Locale(lang, country ?: "", variant ?: "")
+        val normLang = normaliseLanguage(lang)
+        val normCountry = normaliseCountry(country ?: "")
 
-        // Check if we have a voice model for this language
         val voices = voiceManager.listVoices()
-        val exactMatch = voices.any { it.locale.language == locale.language && it.locale.country == locale.country }
-        val langMatch = voices.any { it.locale.language == locale.language }
+
+        val exactMatch = voices.any {
+            it.locale.language == normLang &&
+            (normCountry.isEmpty() || it.locale.country.equals(normCountry, ignoreCase = true))
+        }
+        val langMatch = voices.any { it.locale.language == normLang }
+
+        Log.d(TAG, "onIsLanguageAvailable($lang/$country/$variant) → norm=$normLang/$normCountry exact=$exactMatch lang=$langMatch voices=${voices.size}")
 
         return when {
             exactMatch -> TextToSpeech.LANG_COUNTRY_AVAILABLE
@@ -188,8 +226,8 @@ class PiperTtsService : TextToSpeechService() {
 
     override fun onGetLanguage(): Array<String> {
         return arrayOf(
-            currentLocale.isO3Language ?: "eng",
-            currentLocale.isO3Country ?: "USA",
+            currentLocale.language,
+            currentLocale.country,
             ""
         )
     }
@@ -200,7 +238,9 @@ class PiperTtsService : TextToSpeechService() {
             return TextToSpeech.LANG_NOT_SUPPORTED
         }
 
-        val locale = Locale(lang ?: "en", country ?: "US", variant ?: "")
+        val normLang = normaliseLanguage(lang ?: "en")
+        val normCountry = normaliseCountry(country ?: "")
+        val locale = Locale(normLang, normCountry, variant ?: "")
         return loadVoiceForLocale(locale)
     }
 
@@ -239,7 +279,9 @@ class PiperTtsService : TextToSpeechService() {
         val requestLang = request.language
         val requestCountry = request.country
         if (requestLang != null) {
-            val requestLocale = Locale(requestLang, requestCountry ?: "")
+            val normLang = normaliseLanguage(requestLang)
+            val normCountry = normaliseCountry(requestCountry ?: "")
+            val requestLocale = Locale(normLang, normCountry)
             if (requestLocale.language != currentLocale.language) {
                 loadVoiceForLocale(requestLocale)
             }

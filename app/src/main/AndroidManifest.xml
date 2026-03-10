@@ -29,11 +29,38 @@
             android:exported="false"
             android:label="@string/voice_manager_title" />
 
-        <!-- TTS Engine Settings activity (launched from system TTS settings) -->
+        <!-- TTS Engine Settings activity (launched from system TTS settings gear icon) -->
         <activity
             android:name=".ui.TtsSettingsActivity"
             android:exported="true"
             android:label="@string/tts_settings_title" />
+
+        <!--
+            CHECK_TTS_DATA handler — Android sends this intent to verify the engine
+            has voice data available. Without this, the engine will NOT appear in
+            TTS settings on many Android versions.
+        -->
+        <activity
+            android:name=".service.CheckVoiceData"
+            android:exported="true"
+            android:theme="@android:style/Theme.NoDisplay">
+            <intent-filter>
+                <action android:name="android.speech.tts.engine.CHECK_TTS_DATA" />
+            </intent-filter>
+        </activity>
+
+        <!--
+            GET_SAMPLE_TEXT handler — Android sends this to get sample text for
+            the "Listen to an example" button in TTS settings.
+        -->
+        <activity
+            android:name=".service.GetSampleText"
+            android:exported="true"
+            android:theme="@android:style/Theme.NoDisplay">
+            <intent-filter>
+                <action android:name="android.speech.tts.engine.GET_SAMPLE_TEXT" />
+            </intent-filter>
+        </activity>
 
         <!-- System TTS Engine Service -->
         <service
