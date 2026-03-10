@@ -21,6 +21,7 @@ package com.aitorpazos.pipertts.ui
 import android.os.Bundle
 import android.text.Editable
 import android.text.TextWatcher
+import android.util.Log
 import android.view.View
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
@@ -45,8 +46,10 @@ class VoiceListActivity : AppCompatActivity() {
     private lateinit var adapter: VoiceAdapter
 
     private var allVoices: List<DownloadableVoice> = emptyList()
-    private var filterInstalled = false
     private var searchQuery = ""
+
+    /** Current filter: 0=all, 1=installed, 2=available */
+    private var filterMode = 0
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -65,8 +68,13 @@ class VoiceListActivity : AppCompatActivity() {
 
         binding.toolbar.setNavigationOnClickListener { finish() }
 
-        binding.chipInstalled.setOnCheckedChangeListener { _, isChecked ->
-            filterInstalled = isChecked
+        // Chip group filter
+        binding.chipGroupFilter.setOnCheckedStateChangeListener { _, checkedIds ->
+            filterMode = when {
+                checkedIds.contains(R.id.chipInstalled) -> 1
+                checkedIds.contains(R.id.chipAvailable) -> 2
+                else -> 0 // chipAll or nothing
+            }
             applyFilter()
         }
 
@@ -103,6 +111,7 @@ class VoiceListActivity : AppCompatActivity() {
 
                 applyFilter()
             } catch (e: Exception) {
+                Log.e(TAG, "Catalog load failed", e)
                 binding.tvCatalogStatus.text = getString(R.string.catalog_error, e.message ?: "Unknown")
                 Toast.makeText(
                     this@VoiceListActivity,
@@ -118,8 +127,9 @@ class VoiceListActivity : AppCompatActivity() {
     private fun applyFilter() {
         var filtered = allVoices
 
-        if (filterInstalled) {
-            filtered = filtered.filter { it.isInstalled }
+        when (filterMode) {
+            1 -> filtered = filtered.filter { it.isInstalled }
+            2 -> filtered = filtered.filter { !it.isInstalled }
         }
 
         if (searchQuery.isNotEmpty()) {
@@ -224,5 +234,9 @@ class VoiceListActivity : AppCompatActivity() {
                 installedCount
             )
         }
+    }
+
+    companion object {
+        private const val TAG = "VoiceListActivity"
     }
 }

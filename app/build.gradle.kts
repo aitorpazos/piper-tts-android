@@ -11,8 +11,8 @@ android {
         applicationId = "com.aitorpazos.pipertts"
         minSdk = 24
         targetSdk = 34
-        versionCode = 2
-        versionName = "1.1.0"
+        versionCode = 4
+        versionName = "1.2.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -90,6 +90,7 @@ android {
 }
 
 // Assign distinct version codes per ABI split so Play Store accepts all APKs
+// Universal APK gets the highest ABI multiplier (4) so it can always be updated to/from
 val abiVersionCodes = mapOf("armeabi-v7a" to 1, "arm64-v8a" to 2, "x86_64" to 3)
 android.applicationVariants.all {
     outputs.forEach { output ->
@@ -97,8 +98,11 @@ android.applicationVariants.all {
             val abiName = output.filters.find {
                 it.filterType == com.android.build.VariantOutput.FilterType.ABI.name
             }?.identifier
+            // For ABI-specific APKs, use abiCode * 1000 + versionCode
+            // For universal APK (abiName == null), use 4 * 1000 + versionCode
+            val abiCode = if (abiName != null) abiVersionCodes[abiName] ?: 0 else 4
             output.versionCodeOverride =
-                (abiVersionCodes[abiName] ?: 0) * 1000 + (android.defaultConfig.versionCode ?: 1)
+                abiCode * 1000 + (android.defaultConfig.versionCode ?: 1)
         }
     }
 }

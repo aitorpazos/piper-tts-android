@@ -20,10 +20,9 @@ package com.aitorpazos.pipertts.download
 
 import android.content.Context
 import android.util.Log
-import com.google.gson.Gson
-import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.json.JSONObject
 import java.io.File
 import java.io.FileOutputStream
 import java.net.HttpURLConnection
@@ -34,6 +33,9 @@ import java.net.URL
  *
  * Catalog: https://huggingface.co/rhasspy/piper-voices/raw/main/voices.json
  * Files:   https://huggingface.co/rhasspy/piper-voices/resolve/main/{path}
+ *
+ * Uses org.json (built into Android) instead of Gson TypeToken to avoid
+ * R8/ProGuard stripping generic type information at build time.
  */
 class VoiceDownloadManager(private val context: Context) {
 
@@ -48,33 +50,8 @@ class VoiceDownloadManager(private val context: Context) {
         private const val CATALOG_MAX_AGE_MS = 24 * 60 * 60 * 1000L // 24 hours
     }
 
-    private val gson = Gson()
     private val voicesDir: File get() = File(context.filesDir, VOICES_DIR).also { it.mkdirs() }
     private val catalogCacheFile: File get() = File(context.cacheDir, CATALOG_CACHE_FILE)
-
-    data class CatalogVoice(
-        val key: String,
-        val name: String,
-        val language: Language,
-        val quality: String,
-        val num_speakers: Int,
-        val files: Map<String, FileInfo>,
-        val aliases: List<String>
-    )
-
-    data class Language(
-        val code: String,
-        val family: String,
-        val region: String,
-        val name_native: String,
-        val name_english: String,
-        val country_english: String
-    )
-
-    data class FileInfo(
-        val size_bytes: Long,
-        val md5_digest: String
-    )
 
     data class DownloadableVoice(
         val key: String,
@@ -86,7 +63,12 @@ class VoiceDownloadManager(private val context: Context) {
         val quality: String,
         val numSpeakers: Int,
         val modelSizeBytes: Long,
-        val isInstalled: Boolean
+        val isInstalled: Boolean,
+        // Internal: paths to onnx and config files in the catalog
+        val onnxPath: String = "",
+        val configPath: String = "",
+        val onnxSizeBytes: Long = 0,
+        val configSizeBytes: Long = 0
     )
 
     interface DownloadProgressListener {
@@ -97,30 +79,88 @@ class VoiceDownloadManager(private val context: Context) {
 
     /**
      * Fetch the voice catalog from HuggingFace (with 24h cache).
+     *
+     * Parses the JSON manually with org.json to avoid Gson TypeToken issues
+     * that break under R8 minification.
      */
     suspend fun fetchCatalog(forceRefresh: Boolean = false): List<DownloadableVoice> =
         withContext(Dispatchers.IO) {
             val catalogJson = getCatalogJson(forceRefresh)
-            val type = object : TypeToken<Map<String, CatalogVoice>>() {}.type
-            val catalog: Map<String, CatalogVoice> = gson.fromJson(catalogJson, type)
             val installedKeys = getInstalledVoiceKeys()
-
-            catalog.values.map { voice ->
-                val onnxFile = voice.files.entries.find { it.key.endsWith(".onnx") }
-                DownloadableVoice(
-                    key = voice.key,
-                    displayName = voice.name,
-                    languageEnglish = voice.language.name_english,
-                    languageNative = voice.language.name_native,
-                    countryEnglish = voice.language.country_english,
-                    languageCode = voice.language.code,
-                    quality = voice.quality,
-                    numSpeakers = voice.num_speakers,
-                    modelSizeBytes = onnxFile?.value?.size_bytes ?: 0,
-                    isInstalled = voice.key in installedKeys
-                )
-            }.sortedWith(compareBy({ it.languageEnglish }, { it.displayName }, { it.quality }))
+            parseCatalog(catalogJson, installedKeys)
         }
+
+    private fun parseCatalog(json: String, installedKeys: Set<String>): List<DownloadableVoice> {
+        val voices = mutableListOf<DownloadableVoice>()
+        try {
+            val root = JSONObject(json)
+            val keys = root.keys()
+            while (keys.hasNext()) {
+                val key = keys.next()
+                try {
+                    val obj = root.getJSONObject(key)
+                    val name = obj.optString("name", key)
+                    val quality = obj.optString("quality", "medium")
+                    val numSpeakers = obj.optInt("num_speakers", 1)
+
+                    val lang = obj.optJSONObject("language")
+                    val languageCode = lang?.optString("code", "") ?: ""
+                    val languageEnglish = lang?.optString("name_english", "") ?: ""
+                    val languageNative = lang?.optString("name_native", "") ?: ""
+                    val countryEnglish = lang?.optString("country_english", "") ?: ""
+
+                    // Find .onnx and .onnx.json file entries
+                    val files = obj.optJSONObject("files")
+                    var onnxPath = ""
+                    var onnxSize = 0L
+                    var configPath = ""
+                    var configSize = 0L
+
+                    if (files != null) {
+                        val fileKeys = files.keys()
+                        while (fileKeys.hasNext()) {
+                            val fk = fileKeys.next()
+                            val fi = files.optJSONObject(fk)
+                            val size = fi?.optLong("size_bytes", 0) ?: 0
+                            if (fk.endsWith(".onnx.json")) {
+                                configPath = fk
+                                configSize = size
+                            } else if (fk.endsWith(".onnx")) {
+                                onnxPath = fk
+                                onnxSize = size
+                            }
+                        }
+                    }
+
+                    voices.add(
+                        DownloadableVoice(
+                            key = key,
+                            displayName = name,
+                            languageEnglish = languageEnglish,
+                            languageNative = languageNative,
+                            countryEnglish = countryEnglish,
+                            languageCode = languageCode,
+                            quality = quality,
+                            numSpeakers = numSpeakers,
+                            modelSizeBytes = onnxSize,
+                            isInstalled = key in installedKeys,
+                            onnxPath = onnxPath,
+                            configPath = configPath,
+                            onnxSizeBytes = onnxSize,
+                            configSizeBytes = configSize
+                        )
+                    )
+                } catch (e: Exception) {
+                    Log.w(TAG, "Failed to parse voice entry: $key", e)
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to parse catalog JSON", e)
+            throw RuntimeException("Failed to parse voice catalog: ${e.message}", e)
+        }
+
+        return voices.sortedWith(compareBy({ it.languageEnglish }, { it.displayName }, { it.quality }))
+    }
 
     /**
      * Download a voice model (onnx + config json).
@@ -131,17 +171,19 @@ class VoiceDownloadManager(private val context: Context) {
     ): Boolean = withContext(Dispatchers.IO) {
         try {
             val catalogJson = getCatalogJson(false)
-            val type = object : TypeToken<Map<String, CatalogVoice>>() {}.type
-            val catalog: Map<String, CatalogVoice> = gson.fromJson(catalogJson, type)
-            val voice = catalog[voiceKey]
+            val installedKeys = getInstalledVoiceKeys()
+            val allVoices = parseCatalog(catalogJson, installedKeys)
+            val voice = allVoices.find { it.key == voiceKey }
                 ?: throw IllegalArgumentException("Voice not found: $voiceKey")
 
-            val onnxEntry = voice.files.entries.find { it.key.endsWith(".onnx") && !it.key.endsWith(".onnx.json") }
-                ?: throw IllegalArgumentException("No .onnx file in voice: $voiceKey")
-            val configEntry = voice.files.entries.find { it.key.endsWith(".onnx.json") }
-                ?: throw IllegalArgumentException("No .onnx.json file in voice: $voiceKey")
+            if (voice.onnxPath.isEmpty()) {
+                throw IllegalArgumentException("No .onnx file in voice: $voiceKey")
+            }
+            if (voice.configPath.isEmpty()) {
+                throw IllegalArgumentException("No .onnx.json file in voice: $voiceKey")
+            }
 
-            val totalBytes = onnxEntry.value.size_bytes + configEntry.value.size_bytes
+            val totalBytes = voice.onnxSizeBytes + voice.configSizeBytes
 
             // Download .onnx model
             val onnxDest = File(voicesDir, "$voiceKey.onnx")
@@ -150,21 +192,21 @@ class VoiceDownloadManager(private val context: Context) {
             Log.i(TAG, "Downloading voice: $voiceKey (${totalBytes / 1024 / 1024} MB)")
 
             downloadFile(
-                url = FILES_BASE_URL + onnxEntry.key,
+                url = FILES_BASE_URL + voice.onnxPath,
                 dest = onnxDest,
-                expectedSize = onnxEntry.value.size_bytes,
+                expectedSize = voice.onnxSizeBytes,
                 listener = listener,
                 totalBytes = totalBytes,
                 startOffset = 0
             )
 
             downloadFile(
-                url = FILES_BASE_URL + configEntry.key,
+                url = FILES_BASE_URL + voice.configPath,
                 dest = configDest,
-                expectedSize = configEntry.value.size_bytes,
+                expectedSize = voice.configSizeBytes,
                 listener = listener,
                 totalBytes = totalBytes,
-                startOffset = onnxEntry.value.size_bytes
+                startOffset = voice.onnxSizeBytes
             )
 
             listener?.onComplete()
@@ -268,7 +310,7 @@ class VoiceDownloadManager(private val context: Context) {
             }
 
             // Verify size
-            if (tmpFile.length() != expectedSize) {
+            if (expectedSize > 0 && tmpFile.length() != expectedSize) {
                 tmpFile.delete()
                 throw RuntimeException(
                     "Size mismatch for ${dest.name}: expected=$expectedSize actual=${tmpFile.length()}"
