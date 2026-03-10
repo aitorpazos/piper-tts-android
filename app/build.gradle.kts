@@ -11,8 +11,8 @@ android {
         applicationId = "com.aitorpazos.pipertts"
         minSdk = 24
         targetSdk = 34
-        versionCode = 10
-        versionName = "1.7.0"
+        versionCode = 11
+        versionName = "1.8.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -45,8 +45,16 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = true
-            isShrinkResources = true
+            // IMPORTANT: R8 minification is DISABLED for TTS engine compatibility.
+            // Android's TTS framework discovers and binds to the service using
+            // PackageManager queries and then calls methods via framework binding.
+            // R8 can strip or rename methods/classes that the framework needs even
+            // with extensive ProGuard keep rules, because the TTS framework uses
+            // internal reflection paths that are not fully documented.
+            // The APK size increase (~2-3MB) is negligible for a TTS app that
+            // downloads 60MB+ voice models.
+            isMinifyEnabled = false
+            isShrinkResources = false
             // Use release keystore if configured, otherwise fall back to debug signing
             val releaseConfig = signingConfigs.getByName("release")
             signingConfig = if (releaseConfig.storeFile?.exists() == true) {
@@ -54,10 +62,6 @@ android {
             } else {
                 signingConfigs.getByName("debug")
             }
-            proguardFiles(
-                getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro"
-            )
         }
         debug {
             isMinifyEnabled = false

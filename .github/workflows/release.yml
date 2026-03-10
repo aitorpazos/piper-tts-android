@@ -61,6 +61,75 @@ jobs:
             esac
           done
 
+      - name: Verify TTS engine registration in APK
+        run: |
+          # Use aapt2 to dump the manifest from the universal APK and verify
+          # all required TTS components are present
+          APK="release-apks/piper-tts-universal.apk"
+          AAPT2="${ANDROID_HOME}/build-tools/$(ls ${ANDROID_HOME}/build-tools/ | sort -V | tail -1)/aapt2"
+          
+          echo "=== Verifying TTS engine manifest ==="
+          MANIFEST=$($AAPT2 dump xmltree "$APK" --file AndroidManifest.xml)
+          
+          # Check TTS_SERVICE intent filter on the service
+          echo "$MANIFEST" | grep -q "android.intent.action.TTS_SERVICE" || {
+            echo "FAIL: TTS_SERVICE intent filter not found in manifest"
+            exit 1
+          }
+          echo "✓ TTS_SERVICE intent filter present"
+          
+          # Check BIND_TEXT_TO_SPEECH_SERVICE permission
+          echo "$MANIFEST" | grep -q "android.permission.BIND_TEXT_TO_SPEECH_SERVICE" || {
+            echo "FAIL: BIND_TEXT_TO_SPEECH_SERVICE permission not found"
+            exit 1
+          }
+          echo "✓ BIND_TEXT_TO_SPEECH_SERVICE permission present"
+          
+          # Check android.speech.tts meta-data
+          echo "$MANIFEST" | grep -q "android.speech.tts" || {
+            echo "FAIL: android.speech.tts meta-data not found"
+            exit 1
+          }
+          echo "✓ android.speech.tts meta-data present"
+          
+          # Check CHECK_TTS_DATA activity
+          echo "$MANIFEST" | grep -q "android.speech.tts.engine.CHECK_TTS_DATA" || {
+            echo "FAIL: CHECK_TTS_DATA activity not found"
+            exit 1
+          }
+          echo "✓ CHECK_TTS_DATA activity present"
+          
+          # Check INSTALL_TTS_DATA activity
+          echo "$MANIFEST" | grep -q "android.speech.tts.engine.INSTALL_TTS_DATA" || {
+            echo "FAIL: INSTALL_TTS_DATA activity not found"
+            exit 1
+          }
+          echo "✓ INSTALL_TTS_DATA activity present"
+          
+          # Check GET_SAMPLE_TEXT activity
+          echo "$MANIFEST" | grep -q "android.speech.tts.engine.GET_SAMPLE_TEXT" || {
+            echo "FAIL: GET_SAMPLE_TEXT activity not found"
+            exit 1
+          }
+          echo "✓ GET_SAMPLE_TEXT activity present"
+          
+          # Check CATEGORY_DEFAULT on all intent filters
+          DEFAULT_COUNT=$(echo "$MANIFEST" | grep -c "android.intent.category.DEFAULT" || true)
+          if [ "$DEFAULT_COUNT" -lt 4 ]; then
+            echo "FAIL: Expected at least 4 CATEGORY_DEFAULT entries (service + 3 activities), found $DEFAULT_COUNT"
+            exit 1
+          fi
+          echo "✓ CATEGORY_DEFAULT present on all intent filters ($DEFAULT_COUNT entries)"
+          
+          # Check service class name is not obfuscated
+          echo "$MANIFEST" | grep -q "com.aitorpazos.pipertts.service.PiperTtsService" || {
+            echo "FAIL: PiperTtsService class name appears to be obfuscated or missing"
+            exit 1
+          }
+          echo "✓ PiperTtsService class name preserved"
+          
+          echo "=== All TTS engine manifest checks passed ==="
+
       - name: List release artifacts
         run: ls -lh release-apks/
 

@@ -28,6 +28,39 @@ jobs:
       - name: Build debug APK
         run: ./gradlew assembleDebug
 
+      - name: Build release APK (for manifest verification)
+        run: ./gradlew assembleRelease
+
+      - name: Verify TTS engine registration in release APK
+        run: |
+          APK=$(find app/build/outputs/apk/release -name "*.apk" | head -1)
+          if [ -z "$APK" ]; then
+            echo "No release APK found"
+            exit 1
+          fi
+          AAPT2="${ANDROID_HOME}/build-tools/$(ls ${ANDROID_HOME}/build-tools/ | sort -V | tail -1)/aapt2"
+          
+          echo "=== Verifying TTS engine in $APK ==="
+          MANIFEST=$($AAPT2 dump xmltree "$APK" --file AndroidManifest.xml)
+          
+          echo "$MANIFEST" | grep -q "android.intent.action.TTS_SERVICE" || { echo "FAIL: TTS_SERVICE missing"; exit 1; }
+          echo "✓ TTS_SERVICE"
+          
+          echo "$MANIFEST" | grep -q "android.permission.BIND_TEXT_TO_SPEECH_SERVICE" || { echo "FAIL: permission missing"; exit 1; }
+          echo "✓ BIND_TEXT_TO_SPEECH_SERVICE"
+          
+          echo "$MANIFEST" | grep -q "android.speech.tts.engine.CHECK_TTS_DATA" || { echo "FAIL: CHECK_TTS_DATA missing"; exit 1; }
+          echo "✓ CHECK_TTS_DATA"
+          
+          echo "$MANIFEST" | grep -q "com.aitorpazos.pipertts.service.PiperTtsService" || { echo "FAIL: service class obfuscated"; exit 1; }
+          echo "✓ PiperTtsService class preserved"
+          
+          DEFAULT_COUNT=$(echo "$MANIFEST" | grep -c "android.intent.category.DEFAULT" || true)
+          [ "$DEFAULT_COUNT" -ge 4 ] || { echo "FAIL: only $DEFAULT_COUNT CATEGORY_DEFAULT entries"; exit 1; }
+          echo "✓ CATEGORY_DEFAULT on all filters ($DEFAULT_COUNT)"
+          
+          echo "=== All checks passed ==="
+
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
