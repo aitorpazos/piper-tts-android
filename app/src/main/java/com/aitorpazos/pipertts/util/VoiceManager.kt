@@ -145,6 +145,36 @@ class VoiceManager(private val context: Context) {
     }
 
     /**
+     * Load the user's preferred active voice, falling back to locale matching.
+     *
+     * Resolution order:
+     * 1. User-selected active voice (from VoicePreferences)
+     * 2. Best match for the given locale
+     * 3. Any English voice
+     * 4. First available voice
+     */
+    fun loadActiveVoice(voicePreferences: VoicePreferences? = null): VoiceData? {
+        val voices = listVoices()
+        if (voices.isEmpty()) return null
+
+        // 1. Try user's preferred voice
+        val activeKey = voicePreferences?.activeVoiceKey
+            ?: VoicePreferences(context).activeVoiceKey
+        if (activeKey != null) {
+            val preferred = voices.find { it.name == activeKey }
+            if (preferred != null) {
+                return loadVoiceByInfo(preferred)
+            }
+        }
+
+        // 2. Fall back to English or first available
+        val voice = voices.find { it.locale.language == "en" }
+            ?: voices.firstOrNull()
+            ?: return null
+        return loadVoiceByInfo(voice)
+    }
+
+    /**
      * Load a voice model for the given locale.
      */
     fun loadVoice(locale: Locale): VoiceData? {

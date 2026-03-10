@@ -16,11 +16,13 @@
 
     <!-- Main activity sections -->
     <string name="section_installed_voices">Installed Voices</string>
+    <string name="section_active_voice">Active Voice</string>
     <string name="section_tts_engine">System TTS Engine</string>
     <string name="section_test_tts">Test TTS</string>
     <string name="btn_manage_voices">Manage</string>
     <string name="btn_open_tts_settings">Open Android TTS Settings</string>
     <string name="btn_open_app">Open Piper TTS App</string>
+    <string name="btn_set_active">Set Active</string>
     <string name="loading_voices">Loading voices…</string>
     <string name="no_voices_installed">No voice models installed.\nTap Manage to download voices.</string>
     <string name="installed_voices_summary">%1$d voice(s) installed:</string>
@@ -29,6 +31,10 @@
     <string name="engine_status_inactive">Piper TTS is not the active TTS engine.\nCurrent engine: %1$s\nTap below to change it.</string>
     <string name="tts_settings_not_found">Could not open TTS settings. Go to Settings → System → Languages → Text-to-Speech.</string>
     <string name="unknown">Unknown</string>
+    <string name="active_voice_hint">Select which downloaded voice to use for speech synthesis</string>
+    <string name="hint_select_voice">Select voice</string>
+    <string name="voice_selected">Active voice set to: %1$s</string>
+    <string name="active_indicator">✓ ACTIVE</string>
 
     <!-- Voice list / download manager -->
     <string name="voice_manager_title">Voice Manager</string>
