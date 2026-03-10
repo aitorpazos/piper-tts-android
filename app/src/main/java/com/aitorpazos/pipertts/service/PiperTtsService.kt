@@ -258,18 +258,17 @@ class PiperTtsService : TextToSpeechService() {
 
     /**
      * Return a default voice name for a given locale.
-     * Android calls this when selecting the engine — returning a non-null value
-     * is critical for the engine to appear in TTS settings on many devices.
+     *
+     * NOTE: TextToSpeechService does NOT have an overridable onGetDefaultVoiceNameForLocale.
+     * The default voice selection is done through onGetVoices() — Android picks the first
+     * matching voice. This helper method is used internally only.
      */
-    override fun onGetDefaultVoiceNameForLocale(lang: String?, country: String?, variant: String?): String {
-        if (lang == null) return "en-us-default"
-
+    private fun getDefaultVoiceNameForLocale(lang: String, country: String): String {
         val normLang = normaliseLanguage(lang)
-        val normCountry = normaliseCountry(country ?: "")
+        val normCountry = normaliseCountry(country)
 
         try {
             val voices = voiceManager.listVoices()
-            // Try exact match first, then language match
             val match = voices.find {
                 it.locale.language == normLang &&
                 (normCountry.isEmpty() || it.locale.country.equals(normCountry, ignoreCase = true))
@@ -280,7 +279,6 @@ class PiperTtsService : TextToSpeechService() {
             Log.w(TAG, "Error finding default voice for $lang-$country", e)
         }
 
-        // Return a placeholder name — must not be empty or null
         return if (normCountry.isNotEmpty()) "$normLang-${normCountry.lowercase()}-default" else "$normLang-default"
     }
 
