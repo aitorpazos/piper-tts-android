@@ -18,29 +18,109 @@
 
 package com.aitorpazos.pipertts.model
 
-import com.google.gson.annotations.SerializedName
-
 /**
  * Piper voice configuration model.
  * Maps to the JSON config files that accompany .onnx voice models.
+ *
+ * Parsed manually with org.json to avoid Gson/R8 TypeToken issues.
  */
 data class PiperVoiceConfig(
     val audio: AudioConfig,
     val espeak: EspeakConfig? = null,
-    @SerializedName("num_symbols")
     val numSymbols: Int = 0,
-    @SerializedName("num_speakers")
     val numSpeakers: Int = 1,
-    @SerializedName("speaker_id_map")
     val speakerIdMap: Map<String, Int>? = null,
-    val phoneme_type: String? = null,
-    @SerializedName("phoneme_id_map")
+    val phonemeType: String? = null,
     val phonemeIdMap: Map<String, List<Int>>? = null,
     val inference: InferenceConfig? = null
-)
+) {
+    companion object {
+        /**
+         * Parse a PiperVoiceConfig from a JSON string using org.json.
+         * This avoids Gson TypeToken issues under R8/ProGuard minification.
+         */
+        fun fromJson(json: String): PiperVoiceConfig {
+            val obj = org.json.JSONObject(json)
+
+            val audioObj = obj.getJSONObject("audio")
+            val audio = AudioConfig(
+                sampleRate = audioObj.optInt("sample_rate", 22050),
+                quality = audioObj.optString("quality", null)
+            )
+
+            val espeak = if (obj.has("espeak")) {
+                val e = obj.getJSONObject("espeak")
+                EspeakConfig(voice = e.optString("voice", "en-us"))
+            } else null
+
+            val numSymbols = obj.optInt("num_symbols", 0)
+            val numSpeakers = obj.optInt("num_speakers", 1)
+
+            val speakerIdMap = if (obj.has("speaker_id_map")) {
+                val m = obj.getJSONObject("speaker_id_map")
+                val map = mutableMapOf<String, Int>()
+                val keys = m.keys()
+                while (keys.hasNext()) {
+                    val k = keys.next()
+                    map[k] = m.getInt(k)
+                }
+                map
+            } else null
+
+            val phonemeType = obj.optString("phoneme_type", null)
+
+            val phonemeIdMap = if (obj.has("phoneme_id_map")) {
+                val m = obj.getJSONObject("phoneme_id_map")
+                val map = mutableMapOf<String, List<Int>>()
+                val keys = m.keys()
+                while (keys.hasNext()) {
+                    val k = keys.next()
+                    val arr = m.getJSONArray(k)
+                    val list = mutableListOf<Int>()
+                    for (i in 0 until arr.length()) {
+                        list.add(arr.getInt(i))
+                    }
+                    map[k] = list
+                }
+                map
+            } else null
+
+            val inference = if (obj.has("inference")) {
+                val inf = obj.getJSONObject("inference")
+                val phonemeSilence = if (inf.has("phoneme_silence")) {
+                    val ps = inf.getJSONObject("phoneme_silence")
+                    val psMap = mutableMapOf<String, Float>()
+                    val psKeys = ps.keys()
+                    while (psKeys.hasNext()) {
+                        val k = psKeys.next()
+                        psMap[k] = ps.getDouble(k).toFloat()
+                    }
+                    psMap
+                } else null
+
+                InferenceConfig(
+                    noiseScale = inf.optDouble("noise_scale", 0.667).toFloat(),
+                    lengthScale = inf.optDouble("length_scale", 1.0).toFloat(),
+                    noiseW = inf.optDouble("noise_w", 0.8).toFloat(),
+                    phonemeSilence = phonemeSilence
+                )
+            } else null
+
+            return PiperVoiceConfig(
+                audio = audio,
+                espeak = espeak,
+                numSymbols = numSymbols,
+                numSpeakers = numSpeakers,
+                speakerIdMap = speakerIdMap,
+                phonemeType = phonemeType,
+                phonemeIdMap = phonemeIdMap,
+                inference = inference
+            )
+        }
+    }
+}
 
 data class AudioConfig(
-    @SerializedName("sample_rate")
     val sampleRate: Int = 22050,
     val quality: String? = null
 )
@@ -50,12 +130,8 @@ data class EspeakConfig(
 )
 
 data class InferenceConfig(
-    @SerializedName("noise_scale")
     val noiseScale: Float = 0.667f,
-    @SerializedName("length_scale")
     val lengthScale: Float = 1.0f,
-    @SerializedName("noise_w")
     val noiseW: Float = 0.8f,
-    @SerializedName("phoneme_silence")
     val phonemeSilence: Map<String, Float>? = null
 )
