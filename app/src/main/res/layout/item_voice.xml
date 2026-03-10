@@ -15,6 +15,19 @@
         android:layout_height="wrap_content"
         android:padding="12dp">
 
+        <!-- Active voice indicator -->
+        <TextView
+            android:id="@+id/tvActiveIndicator"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/active_indicator"
+            android:textSize="11sp"
+            android:textStyle="bold"
+            android:textColor="@color/engine_active"
+            android:visibility="gone"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
         <!-- Language / country -->
         <TextView
             android:id="@+id/tvLanguage"
@@ -25,7 +38,7 @@
             android:textColor="?android:textColorPrimary"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintEnd_toStartOf="@id/chipQuality"
-            app:layout_constraintTop_toTopOf="parent" />
+            app:layout_constraintTop_toBottomOf="@id/tvActiveIndicator" />
 
         <!-- Quality badge -->
         <com.google.android.material.chip.Chip
@@ -37,7 +50,7 @@
             android:textSize="11sp"
             app:chipMinHeight="24dp"
             app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintTop_toTopOf="parent" />
+            app:layout_constraintTop_toBottomOf="@id/tvActiveIndicator" />
 
         <!-- Voice name / native language / speakers -->
         <TextView
@@ -86,6 +99,15 @@
             android:orientation="horizontal"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintTop_toBottomOf="@id/progressDownload">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnSetActive"
+                style="@style/Widget.MaterialComponents.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/btn_set_active"
+                android:textSize="13sp"
+                android:visibility="gone" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btnDelete"

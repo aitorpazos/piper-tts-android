@@ -32,6 +32,7 @@ import com.aitorpazos.pipertts.R
 import com.aitorpazos.pipertts.databinding.ActivityVoiceListBinding
 import com.aitorpazos.pipertts.download.VoiceDownloadManager
 import com.aitorpazos.pipertts.download.VoiceDownloadManager.DownloadableVoice
+import com.aitorpazos.pipertts.util.VoicePreferences
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -43,6 +44,7 @@ class VoiceListActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityVoiceListBinding
     private lateinit var downloadManager: VoiceDownloadManager
+    private lateinit var voicePreferences: VoicePreferences
     private lateinit var adapter: VoiceAdapter
 
     private var allVoices: List<DownloadableVoice> = emptyList()
@@ -57,11 +59,14 @@ class VoiceListActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         downloadManager = VoiceDownloadManager(this)
+        voicePreferences = VoicePreferences(this)
 
         adapter = VoiceAdapter(
             onDownload = { voice -> downloadVoice(voice) },
-            onDelete = { voice -> confirmDeleteVoice(voice) }
+            onDelete = { voice -> confirmDeleteVoice(voice) },
+            onSetActive = { voice -> setActiveVoice(voice) }
         )
+        adapter.activeVoiceKey = voicePreferences.activeVoiceKey
 
         binding.rvVoices.layoutManager = LinearLayoutManager(this)
         binding.rvVoices.adapter = adapter
@@ -88,6 +93,16 @@ class VoiceListActivity : AppCompatActivity() {
         })
 
         loadCatalog(forceRefresh = false)
+    }
+
+    private fun setActiveVoice(voice: DownloadableVoice) {
+        voicePreferences.activeVoiceKey = voice.key
+        adapter.activeVoiceKey = voice.key
+        Toast.makeText(
+            this,
+            getString(R.string.voice_selected, voice.displayName),
+            Toast.LENGTH_SHORT
+        ).show()
     }
 
     private fun loadCatalog(forceRefresh: Boolean) {
@@ -192,6 +207,13 @@ class VoiceListActivity : AppCompatActivity() {
                 // Refresh to update installed state
                 refreshInstalledState()
                 withContext(Dispatchers.Main) {
+                    // Auto-set as active if it's the first installed voice
+                    val installedKeys = downloadManager.getInstalledVoiceKeys()
+                    if (installedKeys.size == 1 || voicePreferences.activeVoiceKey == null) {
+                        voicePreferences.activeVoiceKey = voice.key
+                        adapter.activeVoiceKey = voice.key
+                    }
+
                     Toast.makeText(
                         this@VoiceListActivity,
                         "${voice.languageEnglish} - ${voice.displayName} installed!",
@@ -213,6 +235,18 @@ class VoiceListActivity : AppCompatActivity() {
 
     private fun deleteVoice(voice: DownloadableVoice) {
         downloadManager.deleteVoice(voice.key)
+
+        // If deleting the active voice, clear the preference
+        if (voicePreferences.activeVoiceKey == voice.key) {
+            voicePreferences.clearActiveVoice()
+            // Try to set the next available voice as active
+            val remaining = downloadManager.getInstalledVoiceKeys()
+            if (remaining.isNotEmpty()) {
+                voicePreferences.activeVoiceKey = remaining.first()
+            }
+            adapter.activeVoiceKey = voicePreferences.activeVoiceKey
+        }
+
         refreshInstalledState()
         Toast.makeText(this, "Voice deleted", Toast.LENGTH_SHORT).show()
     }

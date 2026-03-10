@@ -27,6 +27,7 @@ import android.speech.tts.Voice
 import android.util.Log
 import com.aitorpazos.pipertts.engine.PiperEngine
 import com.aitorpazos.pipertts.util.VoiceManager
+import com.aitorpazos.pipertts.util.VoicePreferences
 import java.util.Locale
 
 /**
@@ -100,27 +101,20 @@ class PiperTtsService : TextToSpeechService() {
     private var currentLocale: Locale = Locale.US
     private var currentVoiceName: String? = null
     private lateinit var voiceManager: VoiceManager
+    private lateinit var voicePreferences: VoicePreferences
 
     override fun onCreate() {
         super.onCreate()
         Log.i(TAG, "PiperTtsService created")
         voiceManager = VoiceManager(this)
+        voicePreferences = VoicePreferences(this)
 
-        // Pre-load default voice if available.
-        // If no voices are installed yet, the service stays alive but synthesis
-        // will return an error until the user downloads a voice via Voice Manager.
-        try {
-            val voices = voiceManager.listVoices()
-            if (voices.isNotEmpty()) {
-                val defaultVoice = voices.find { it.locale.language == "en" } ?: voices.first()
-                loadVoiceForLocale(defaultVoice.locale)
-                Log.i(TAG, "Pre-loaded default voice: ${defaultVoice.name}")
-            } else {
-                Log.i(TAG, "No voices installed yet — user needs to download via Voice Manager")
-            }
-        } catch (e: Exception) {
-            Log.w(TAG, "Failed to pre-load default voice (non-fatal)", e)
-        }
+        // NOTE: We do NOT pre-load the voice model here.
+        // Loading a 60MB+ ONNX model on the main thread would cause an ANR,
+        // and Android would kill the service and mark it as broken.
+        // Instead, the voice is loaded lazily on first synthesis (which runs
+        // on a binder thread, not the main thread).
+        Log.i(TAG, "Service ready — voice will be loaded on first synthesis request")
     }
 
     /**
@@ -357,11 +351,23 @@ class PiperTtsService : TextToSpeechService() {
 
         val currentEngine = engine
         if (currentEngine == null) {
-            Log.e(TAG, "No engine loaded, attempting to load default")
-            if (loadVoiceForLocale(Locale.US) == TextToSpeech.LANG_NOT_SUPPORTED) {
-                // No voice installed — return silence instead of error
-                // to avoid Android marking the engine as broken
-                Log.w(TAG, "No voice models installed yet, returning silence")
+            Log.i(TAG, "No engine loaded, loading active voice")
+            try {
+                val voiceData = voiceManager.loadActiveVoice(voicePreferences)
+                if (voiceData != null) {
+                    engine = PiperEngine(voiceData.config, voiceData.modelBytes)
+                    currentLocale = voiceData.locale
+                    currentVoiceName = voiceData.name
+                    Log.i(TAG, "Lazily loaded active voice: ${voiceData.name}")
+                } else {
+                    // No voice installed — return silence
+                    Log.w(TAG, "No voice models installed yet, returning silence")
+                    callback.start(22050, AudioFormat.ENCODING_PCM_16BIT, 1)
+                    callback.done()
+                    return
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to load voice, returning silence", e)
                 callback.start(22050, AudioFormat.ENCODING_PCM_16BIT, 1)
                 callback.done()
                 return

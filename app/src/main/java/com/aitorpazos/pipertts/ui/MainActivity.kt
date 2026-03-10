@@ -24,7 +24,7 @@ import android.media.AudioFormat
 import android.media.AudioTrack
 import android.os.Bundle
 import android.provider.Settings
-import android.speech.tts.TextToSpeech
+import android.widget.ArrayAdapter
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
@@ -32,6 +32,7 @@ import com.aitorpazos.pipertts.R
 import com.aitorpazos.pipertts.databinding.ActivityMainBinding
 import com.aitorpazos.pipertts.engine.PiperEngine
 import com.aitorpazos.pipertts.util.VoiceManager
+import com.aitorpazos.pipertts.util.VoicePreferences
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -40,8 +41,12 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
     private lateinit var voiceManager: VoiceManager
+    private lateinit var voicePreferences: VoicePreferences
     private var engine: PiperEngine? = null
     private var audioTrack: AudioTrack? = null
+
+    /** Currently listed installed voices — used for dropdown mapping */
+    private var installedVoices: List<VoiceManager.VoiceInfo> = emptyList()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -49,10 +54,23 @@ class MainActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         voiceManager = VoiceManager(this)
+        voicePreferences = VoicePreferences(this)
 
         // === Installed Voices section ===
         binding.btnManageVoices.setOnClickListener {
             startActivity(Intent(this, VoiceListActivity::class.java))
+        }
+
+        // === Active Voice selector ===
+        binding.actvActiveVoice.setOnItemClickListener { _, _, position, _ ->
+            if (position in installedVoices.indices) {
+                val selected = installedVoices[position]
+                voicePreferences.activeVoiceKey = selected.name
+                // Reset engine so next synthesis uses the new voice
+                engine?.close()
+                engine = null
+                Toast.makeText(this, getString(R.string.voice_selected, selected.name), Toast.LENGTH_SHORT).show()
+            }
         }
 
         // === TTS Engine section ===
@@ -100,11 +118,15 @@ class MainActivity : AppCompatActivity() {
             val voices = withContext(Dispatchers.IO) {
                 voiceManager.listVoices()
             }
+            installedVoices = voices
+
             if (voices.isEmpty()) {
                 binding.tvInstalledVoices.text = getString(R.string.no_voices_installed)
-                // Disable TTS test when no voices installed
                 binding.btnSpeak.isEnabled = false
                 binding.tvStatus.text = "Download a voice first to test TTS"
+                // Hide active voice selector when no voices
+                binding.tilActiveVoice.isEnabled = false
+                binding.actvActiveVoice.setText("", false)
             } else {
                 binding.btnSpeak.isEnabled = true
                 binding.tvStatus.text = getString(R.string.status_ready)
@@ -115,6 +137,29 @@ class MainActivity : AppCompatActivity() {
                     R.string.installed_voices_summary,
                     voices.size
                 ) + "\n" + voiceLines
+
+                // Populate active voice dropdown
+                binding.tilActiveVoice.isEnabled = true
+                val displayNames = voices.map { voice ->
+                    "${voice.locale.displayLanguage} — ${voice.name} (${voice.quality})"
+                }
+                val adapter = ArrayAdapter(
+                    this@MainActivity,
+                    android.R.layout.simple_dropdown_item_1line,
+                    displayNames
+                )
+                binding.actvActiveVoice.setAdapter(adapter)
+
+                // Show current selection
+                val activeKey = voicePreferences.activeVoiceKey
+                val activeIndex = voices.indexOfFirst { it.name == activeKey }
+                if (activeIndex >= 0) {
+                    binding.actvActiveVoice.setText(displayNames[activeIndex], false)
+                } else {
+                    // Auto-select first voice if none selected
+                    voicePreferences.activeVoiceKey = voices.first().name
+                    binding.actvActiveVoice.setText(displayNames[0], false)
+                }
             }
         }
     }
@@ -151,9 +196,9 @@ class MainActivity : AppCompatActivity() {
         lifecycleScope.launch {
             try {
                 val pcmData = withContext(Dispatchers.IO) {
-                    // Ensure engine is loaded
+                    // Ensure engine is loaded with the active voice
                     if (engine == null) {
-                        val voiceData = voiceManager.loadVoice(java.util.Locale.US)
+                        val voiceData = voiceManager.loadActiveVoice(voicePreferences)
                             ?: throw Exception("No voice model available. Tap 'Manage' to download one.")
                         engine = PiperEngine(voiceData.config, voiceData.modelBytes)
                     }

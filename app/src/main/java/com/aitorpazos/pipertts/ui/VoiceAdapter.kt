@@ -30,12 +30,27 @@ import com.aitorpazos.pipertts.download.VoiceDownloadManager.DownloadableVoice
 
 class VoiceAdapter(
     private val onDownload: (DownloadableVoice) -> Unit,
-    private val onDelete: (DownloadableVoice) -> Unit
+    private val onDelete: (DownloadableVoice) -> Unit,
+    private val onSetActive: ((DownloadableVoice) -> Unit)? = null
 ) : ListAdapter<DownloadableVoice, VoiceAdapter.VoiceViewHolder>(VoiceDiffCallback()) {
 
     // Track which voices are currently downloading
     private val downloadingKeys = mutableSetOf<String>()
     private val downloadProgress = mutableMapOf<String, Int>()
+
+    /** The currently active voice key (set from outside) */
+    var activeVoiceKey: String? = null
+        set(value) {
+            val old = field
+            field = value
+            // Refresh items that changed active state
+            if (old != value) {
+                val oldPos = currentList.indexOfFirst { it.key == old }
+                val newPos = currentList.indexOfFirst { it.key == value }
+                if (oldPos >= 0) notifyItemChanged(oldPos)
+                if (newPos >= 0) notifyItemChanged(newPos)
+            }
+        }
 
     fun setDownloading(key: String, isDownloading: Boolean, progress: Int = 0) {
         if (isDownloading) {
@@ -66,6 +81,7 @@ class VoiceAdapter(
 
         fun bind(voice: DownloadableVoice) {
             val ctx = binding.root.context
+            val isActive = voice.key == activeVoiceKey
 
             binding.tvLanguage.text = buildString {
                 append(voice.languageEnglish)
@@ -88,6 +104,9 @@ class VoiceAdapter(
             val sizeMb = voice.modelSizeBytes / (1024.0 * 1024.0)
             binding.tvSize.text = String.format("%.1f MB", sizeMb)
 
+            // Active indicator
+            binding.tvActiveIndicator.visibility = if (isActive) View.VISIBLE else View.GONE
+
             val isDownloading = voice.key in downloadingKeys
 
             if (voice.isInstalled) {
@@ -95,11 +114,19 @@ class VoiceAdapter(
                 binding.btnDownload.isEnabled = false
                 binding.btnDelete.visibility = View.VISIBLE
                 binding.progressDownload.visibility = View.GONE
+
+                // Show "Set Active" button for installed voices that aren't already active
+                if (onSetActive != null && !isActive) {
+                    binding.btnSetActive.visibility = View.VISIBLE
+                } else {
+                    binding.btnSetActive.visibility = View.GONE
+                }
             } else if (isDownloading) {
                 val progress = downloadProgress[voice.key] ?: 0
                 binding.btnDownload.text = ctx.getString(R.string.btn_downloading)
                 binding.btnDownload.isEnabled = false
                 binding.btnDelete.visibility = View.GONE
+                binding.btnSetActive.visibility = View.GONE
                 binding.progressDownload.visibility = View.VISIBLE
                 binding.progressDownload.isIndeterminate = progress <= 0
                 if (progress > 0) {
@@ -110,6 +137,7 @@ class VoiceAdapter(
                 binding.btnDownload.text = ctx.getString(R.string.btn_download)
                 binding.btnDownload.isEnabled = true
                 binding.btnDelete.visibility = View.GONE
+                binding.btnSetActive.visibility = View.GONE
                 binding.progressDownload.visibility = View.GONE
             }
 
@@ -122,6 +150,12 @@ class VoiceAdapter(
             binding.btnDelete.setOnClickListener {
                 if (voice.isInstalled) {
                     onDelete(voice)
+                }
+            }
+
+            binding.btnSetActive.setOnClickListener {
+                if (voice.isInstalled) {
+                    onSetActive?.invoke(voice)
                 }
             }
         }
