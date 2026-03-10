@@ -22,7 +22,6 @@ import com.aitorpazos.pipertts.model.AudioConfig
 import com.aitorpazos.pipertts.model.EspeakConfig
 import com.aitorpazos.pipertts.model.InferenceConfig
 import com.aitorpazos.pipertts.model.PiperVoiceConfig
-import com.google.gson.Gson
 import org.junit.Assert.*
 import org.junit.Test
 
@@ -30,8 +29,6 @@ import org.junit.Test
  * Unit tests for the PiperVoiceConfig model and JSON parsing.
  */
 class PiperVoiceConfigTest {
-
-    private val gson = Gson()
 
     @Test
     fun `parse minimal config`() {
@@ -50,7 +47,7 @@ class PiperVoiceConfigTest {
         }
         """.trimIndent()
 
-        val config = gson.fromJson(json, PiperVoiceConfig::class.java)
+        val config = PiperVoiceConfig.fromJson(json)
         assertEquals(22050, config.audio.sampleRate)
         assertEquals(256, config.numSymbols)
         assertEquals(1, config.numSpeakers)
@@ -85,7 +82,7 @@ class PiperVoiceConfigTest {
         }
         """.trimIndent()
 
-        val config = gson.fromJson(json, PiperVoiceConfig::class.java)
+        val config = PiperVoiceConfig.fromJson(json)
         assertEquals("en-us", config.espeak?.voice)
         assertEquals(0.667f, config.inference?.noiseScale ?: 0f, 0.001f)
         assertEquals(1.0f, config.inference?.lengthScale ?: 0f, 0.001f)
@@ -108,7 +105,7 @@ class PiperVoiceConfigTest {
         }
         """.trimIndent()
 
-        val config = gson.fromJson(json, PiperVoiceConfig::class.java)
+        val config = PiperVoiceConfig.fromJson(json)
         assertEquals(3, config.numSpeakers)
         assertNotNull(config.speakerIdMap)
         assertEquals(0, config.speakerIdMap!!["speaker_a"])
@@ -135,25 +132,29 @@ class PiperVoiceConfigTest {
     }
 
     @Test
-    fun `serialize and deserialize roundtrip`() {
-        val original = PiperVoiceConfig(
-            audio = AudioConfig(sampleRate = 16000, quality = "medium"),
-            espeak = EspeakConfig(voice = "en-gb"),
-            numSymbols = 128,
-            numSpeakers = 2,
-            phonemeIdMap = mapOf("_" to listOf(0), "a" to listOf(1, 2)),
-            inference = InferenceConfig(noiseScale = 0.5f, lengthScale = 1.2f, noiseW = 0.6f)
-        )
+    fun `parse and verify roundtrip values`() {
+        val json = """
+        {
+            "audio": { "sample_rate": 16000, "quality": "medium" },
+            "espeak": { "voice": "en-gb" },
+            "num_symbols": 128,
+            "num_speakers": 2,
+            "phoneme_id_map": { "_": [0], "a": [1, 2] },
+            "inference": { "noise_scale": 0.5, "length_scale": 1.2, "noise_w": 0.6 }
+        }
+        """.trimIndent()
 
-        val json = gson.toJson(original)
-        val restored = gson.fromJson(json, PiperVoiceConfig::class.java)
+        val config = PiperVoiceConfig.fromJson(json)
 
-        assertEquals(original.audio.sampleRate, restored.audio.sampleRate)
-        assertEquals(original.audio.quality, restored.audio.quality)
-        assertEquals(original.espeak?.voice, restored.espeak?.voice)
-        assertEquals(original.numSymbols, restored.numSymbols)
-        assertEquals(original.numSpeakers, restored.numSpeakers)
-        assertEquals(original.phonemeIdMap, restored.phonemeIdMap)
-        assertEquals(original.inference?.noiseScale ?: 0f, restored.inference?.noiseScale ?: 0f, 0.001f)
+        assertEquals(16000, config.audio.sampleRate)
+        assertEquals("medium", config.audio.quality)
+        assertEquals("en-gb", config.espeak?.voice)
+        assertEquals(128, config.numSymbols)
+        assertEquals(2, config.numSpeakers)
+        assertEquals(listOf(0), config.phonemeIdMap!!["_"])
+        assertEquals(listOf(1, 2), config.phonemeIdMap!!["a"])
+        assertEquals(0.5f, config.inference?.noiseScale ?: 0f, 0.001f)
+        assertEquals(1.2f, config.inference?.lengthScale ?: 0f, 0.001f)
+        assertEquals(0.6f, config.inference?.noiseW ?: 0f, 0.001f)
     }
 }

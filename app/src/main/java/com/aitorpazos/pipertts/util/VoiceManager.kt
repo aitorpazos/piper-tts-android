@@ -21,7 +21,6 @@ package com.aitorpazos.pipertts.util
 import android.content.Context
 import android.util.Log
 import com.aitorpazos.pipertts.model.PiperVoiceConfig
-import com.google.gson.Gson
 import java.io.File
 import java.util.Locale
 
@@ -42,8 +41,6 @@ class VoiceManager(private val context: Context) {
         private const val VOICES_ASSET_DIR = "voices"
         private const val VOICES_EXTERNAL_DIR = "voices"
     }
-
-    private val gson = Gson()
 
     data class VoiceData(
         val config: PiperVoiceConfig,
@@ -78,7 +75,7 @@ class VoiceManager(private val context: Context) {
                     try {
                         val configJson = context.assets.open("$VOICES_ASSET_DIR/$configFile")
                             .bufferedReader().use { it.readText() }
-                        val config = gson.fromJson(configJson, PiperVoiceConfig::class.java)
+                        val config = PiperVoiceConfig.fromJson(configJson)
                         val locale = parseLocaleFromVoiceName(onnxFile, config)
                         voices.add(
                             VoiceInfo(
@@ -107,7 +104,7 @@ class VoiceManager(private val context: Context) {
                 val configFile = File("${onnxFile.absolutePath}.json")
                 if (configFile.exists()) {
                     try {
-                        val config = gson.fromJson(configFile.readText(), PiperVoiceConfig::class.java)
+                        val config = PiperVoiceConfig.fromJson(configFile.readText())
                         val locale = parseLocaleFromVoiceName(onnxFile.name, config)
                         voices.add(
                             VoiceInfo(
@@ -183,7 +180,7 @@ class VoiceManager(private val context: Context) {
                 modelBytes = File(voice.modelPath).readBytes()
             }
 
-            val config = gson.fromJson(configJson, PiperVoiceConfig::class.java)
+            val config = PiperVoiceConfig.fromJson(configJson)
 
             Log.i(TAG, "Loaded voice: ${voice.name} (${voice.locale}, ${modelBytes.size} bytes)")
             return VoiceData(

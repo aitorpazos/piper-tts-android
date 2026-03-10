@@ -11,8 +11,8 @@ android {
         applicationId = "com.aitorpazos.pipertts"
         minSdk = 24
         targetSdk = 34
-        versionCode = 5
-        versionName = "1.2.1"
+        versionCode = 6
+        versionName = "1.3.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -22,6 +22,14 @@ android {
     }
 
     signingConfigs {
+        // Stable debug keystore committed to repo — ensures consistent signing across
+        // all CI builds so APK updates never fail due to certificate mismatch.
+        getByName("debug") {
+            storeFile = rootProject.file("keystores/debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
         create("release") {
             val keystoreFile = System.getenv("KEYSTORE_FILE")
             if (keystoreFile != null && file(keystoreFile).exists()) {
@@ -122,8 +130,7 @@ dependencies {
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
 
-    // JSON parsing for voice configs
-    implementation("com.google.code.gson:gson:2.10.1")
+    // JSON parsing: uses Android's built-in org.json (no external dependency needed)
 
     // Testing
     testImplementation("junit:junit:4.13.2")
