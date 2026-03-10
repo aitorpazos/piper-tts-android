@@ -64,36 +64,39 @@ class VoiceManager(private val context: Context) {
     fun listVoices(): List<VoiceInfo> {
         val voices = mutableListOf<VoiceInfo>()
 
-        // Check assets
+        // Check assets (may be empty if no voices are bundled)
         try {
-            val assetFiles = context.assets.list(VOICES_ASSET_DIR) ?: emptyArray()
-            val onnxFiles = assetFiles.filter { it.endsWith(".onnx") && !it.endsWith(".onnx.json") }
+            val assetFiles = context.assets.list(VOICES_ASSET_DIR)
+            if (assetFiles != null && assetFiles.isNotEmpty()) {
+                val onnxFiles = assetFiles.filter { it.endsWith(".onnx") && !it.endsWith(".onnx.json") }
 
-            for (onnxFile in onnxFiles) {
-                val configFile = "$onnxFile.json"
-                if (configFile in assetFiles) {
-                    try {
-                        val configJson = context.assets.open("$VOICES_ASSET_DIR/$configFile")
-                            .bufferedReader().use { it.readText() }
-                        val config = PiperVoiceConfig.fromJson(configJson)
-                        val locale = parseLocaleFromVoiceName(onnxFile, config)
-                        voices.add(
-                            VoiceInfo(
-                                name = onnxFile.removeSuffix(".onnx"),
-                                locale = locale,
-                                quality = config.audio.quality ?: "medium",
-                                isAsset = true,
-                                modelPath = "$VOICES_ASSET_DIR/$onnxFile",
-                                configPath = "$VOICES_ASSET_DIR/$configFile"
+                for (onnxFile in onnxFiles) {
+                    val configFile = "$onnxFile.json"
+                    if (configFile in assetFiles) {
+                        try {
+                            val configJson = context.assets.open("$VOICES_ASSET_DIR/$configFile")
+                                .bufferedReader().use { it.readText() }
+                            val config = PiperVoiceConfig.fromJson(configJson)
+                            val locale = parseLocaleFromVoiceName(onnxFile, config)
+                            voices.add(
+                                VoiceInfo(
+                                    name = onnxFile.removeSuffix(".onnx"),
+                                    locale = locale,
+                                    quality = config.audio.quality ?: "medium",
+                                    isAsset = true,
+                                    modelPath = "$VOICES_ASSET_DIR/$onnxFile",
+                                    configPath = "$VOICES_ASSET_DIR/$configFile"
+                                )
                             )
-                        )
-                    } catch (e: Exception) {
-                        Log.w(TAG, "Failed to parse voice config: $configFile", e)
+                        } catch (e: Exception) {
+                            Log.w(TAG, "Failed to parse voice config: $configFile", e)
+                        }
                     }
                 }
             }
         } catch (e: Exception) {
-            Log.w(TAG, "Failed to list asset voices", e)
+            // Assets directory may not exist if no voices are bundled — that's OK
+            Log.d(TAG, "No bundled voices in assets (expected if voices are download-only)")
         }
 
         // Check external storage

@@ -106,16 +106,20 @@ class PiperTtsService : TextToSpeechService() {
         Log.i(TAG, "PiperTtsService created")
         voiceManager = VoiceManager(this)
 
-        // Pre-load default voice if available
+        // Pre-load default voice if available.
+        // If no voices are installed yet, the service stays alive but synthesis
+        // will return an error until the user downloads a voice via Voice Manager.
         try {
             val voices = voiceManager.listVoices()
             if (voices.isNotEmpty()) {
                 val defaultVoice = voices.find { it.locale.language == "en" } ?: voices.first()
                 loadVoiceForLocale(defaultVoice.locale)
                 Log.i(TAG, "Pre-loaded default voice: ${defaultVoice.name}")
+            } else {
+                Log.i(TAG, "No voices installed yet — user needs to download via Voice Manager")
             }
         } catch (e: Exception) {
-            Log.w(TAG, "Failed to pre-load default voice", e)
+            Log.w(TAG, "Failed to pre-load default voice (non-fatal)", e)
         }
     }
 
@@ -208,6 +212,17 @@ class PiperTtsService : TextToSpeechService() {
         val normCountry = normaliseCountry(country ?: "")
 
         val voices = voiceManager.listVoices()
+
+        // If no voices installed yet, still claim English is available
+        // so the engine remains selectable in Android TTS settings.
+        // Actual synthesis will prompt user to download a voice.
+        if (voices.isEmpty()) {
+            return if (normLang == "en") {
+                TextToSpeech.LANG_AVAILABLE
+            } else {
+                TextToSpeech.LANG_NOT_SUPPORTED
+            }
+        }
 
         val exactMatch = voices.any {
             it.locale.language == normLang &&

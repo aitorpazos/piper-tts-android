@@ -102,7 +102,12 @@ class MainActivity : AppCompatActivity() {
             }
             if (voices.isEmpty()) {
                 binding.tvInstalledVoices.text = getString(R.string.no_voices_installed)
+                // Disable TTS test when no voices installed
+                binding.btnSpeak.isEnabled = false
+                binding.tvStatus.text = "Download a voice first to test TTS"
             } else {
+                binding.btnSpeak.isEnabled = true
+                binding.tvStatus.text = getString(R.string.status_ready)
                 val voiceLines = voices.joinToString("\n") { voice ->
                     "• ${voice.locale.displayLanguage} (${voice.locale.displayCountry}) — ${voice.name}"
                 }

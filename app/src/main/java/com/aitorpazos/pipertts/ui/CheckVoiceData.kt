@@ -32,6 +32,10 @@ import com.aitorpazos.pipertts.util.VoiceManager
  * is installed. Without this activity, the engine will NOT appear in
  * Android's "Preferred engine" list.
  *
+ * CRITICAL: Must always return CHECK_VOICE_DATA_PASS so the engine appears
+ * in Android TTS settings. If no voices are installed yet, we still report
+ * English as available — the user can download voices via Voice Manager.
+ *
  * Must return:
  * - TextToSpeech.Engine.CHECK_VOICE_DATA_PASS if voice data is available
  * - EXTRA_AVAILABLE_VOICES: ArrayList<String> of available locale strings
@@ -46,26 +50,33 @@ class CheckVoiceData : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        val voiceManager = VoiceManager(this)
-        val voices = voiceManager.listVoices()
-
         val available = ArrayList<String>()
         val unavailable = ArrayList<String>()
 
-        for (voice in voices) {
-            try {
-                val lang = voice.locale.isO3Language
-                val country = voice.locale.isO3Country
-                available.add(if (country.isNotEmpty()) "$lang-$country" else lang)
-            } catch (e: Exception) {
-                // Fallback to 2-letter codes
-                val lang = voice.locale.language
-                val country = voice.locale.country
-                available.add(if (country.isNotEmpty()) "$lang-$country" else lang)
+        try {
+            val voiceManager = VoiceManager(this)
+            val voices = voiceManager.listVoices()
+
+            for (voice in voices) {
+                try {
+                    val lang = voice.locale.isO3Language
+                    val country = voice.locale.isO3Country
+                    available.add(if (country.isNotEmpty()) "$lang-$country" else lang)
+                } catch (e: Exception) {
+                    // Fallback to 2-letter codes
+                    val lang = voice.locale.language
+                    val country = voice.locale.country
+                    available.add(if (country.isNotEmpty()) "$lang-$country" else lang)
+                }
             }
+        } catch (e: Exception) {
+            Log.w(TAG, "Error listing voices for CHECK_TTS_DATA", e)
         }
 
-        // Always report at least English as available since we have a bundled voice
+        // Always report at least English as available.
+        // This ensures the engine appears in Android TTS settings even before
+        // the user downloads any voice. The engine will prompt for download
+        // when synthesis is first attempted.
         if (available.isEmpty()) {
             available.add("eng-USA")
         }
@@ -76,7 +87,7 @@ class CheckVoiceData : Activity() {
         result.putStringArrayListExtra(TextToSpeech.Engine.EXTRA_AVAILABLE_VOICES, available)
         result.putStringArrayListExtra(TextToSpeech.Engine.EXTRA_UNAVAILABLE_VOICES, unavailable)
 
-        // Always return PASS — we have at least the bundled English voice in assets
+        // Always return PASS so the engine is visible in Android settings
         setResult(TextToSpeech.Engine.CHECK_VOICE_DATA_PASS, result)
         finish()
     }
