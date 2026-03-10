@@ -41,7 +41,7 @@
             TTS settings on many Android versions.
         -->
         <activity
-            android:name=".service.CheckVoiceData"
+            android:name=".ui.CheckVoiceData"
             android:exported="true"
             android:theme="@android:style/Theme.NoDisplay">
             <intent-filter>
@@ -50,11 +50,24 @@
         </activity>
 
         <!--
+            INSTALL_TTS_DATA handler — Android sends this when voice data needs
+            to be installed. Redirects to the Voice Manager.
+        -->
+        <activity
+            android:name=".ui.InstallVoiceData"
+            android:exported="true"
+            android:theme="@android:style/Theme.NoDisplay">
+            <intent-filter>
+                <action android:name="android.speech.tts.engine.INSTALL_TTS_DATA" />
+            </intent-filter>
+        </activity>
+
+        <!--
             GET_SAMPLE_TEXT handler — Android sends this to get sample text for
             the "Listen to an example" button in TTS settings.
         -->
         <activity
-            android:name=".service.GetSampleText"
+            android:name=".ui.GetSampleText"
             android:exported="true"
             android:theme="@android:style/Theme.NoDisplay">
             <intent-filter>
