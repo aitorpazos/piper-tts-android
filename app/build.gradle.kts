@@ -131,6 +131,8 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
 
     // JSON parsing: uses Android's built-in org.json (no external dependency needed)
+    // org.json stub for unit tests (JVM doesn't include Android's org.json)
+    testImplementation("org.json:json:20231013")
 
     // Testing
     testImplementation("junit:junit:4.13.2")
