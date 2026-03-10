@@ -7,8 +7,28 @@
     <string name="btn_speak">Speak</string>
     <string name="btn_stop">Stop</string>
     <string name="status_ready">Ready. Enter text and tap Speak.</string>
+    <string name="status_synthesizing">Synthesizing…</string>
+    <string name="status_no_audio">No audio generated</string>
+    <string name="status_playing">Playing (%1$d samples)</string>
+    <string name="status_error">Error: %1$s</string>
     <string name="tts_settings_title">Piper TTS Settings</string>
-    <string name="tts_settings_description">Configure voice model, speed, and pitch for the Piper TTS engine. Additional voices can be downloaded from the Piper project.</string>
+    <string name="tts_settings_description">Manage voice models for the Piper TTS engine.</string>
+
+    <!-- Main activity sections -->
+    <string name="section_installed_voices">Installed Voices</string>
+    <string name="section_tts_engine">System TTS Engine</string>
+    <string name="section_test_tts">Test TTS</string>
+    <string name="btn_manage_voices">Manage</string>
+    <string name="btn_open_tts_settings">Open Android TTS Settings</string>
+    <string name="btn_open_app">Open Piper TTS App</string>
+    <string name="loading_voices">Loading voices…</string>
+    <string name="no_voices_installed">No voice models installed.\nTap Manage to download voices.</string>
+    <string name="installed_voices_summary">%1$d voice(s) installed:</string>
+    <string name="engine_status_checking">Checking engine status…</string>
+    <string name="engine_status_active">✅ Piper TTS is your active system TTS engine</string>
+    <string name="engine_status_inactive">Piper TTS is not the active TTS engine.\nCurrent engine: %1$s\nTap below to change it.</string>
+    <string name="tts_settings_not_found">Could not open TTS settings. Go to Settings → System → Languages → Text-to-Speech.</string>
+    <string name="unknown">Unknown</string>
 
     <!-- Voice list / download manager -->
     <string name="voice_manager_title">Voice Manager</string>

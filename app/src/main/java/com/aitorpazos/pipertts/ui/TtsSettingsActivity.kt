@@ -18,17 +18,67 @@
 
 package com.aitorpazos.pipertts.ui
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.lifecycleScope
 import com.aitorpazos.pipertts.R
+import com.aitorpazos.pipertts.databinding.ActivityTtsSettingsBinding
+import com.aitorpazos.pipertts.util.VoiceManager
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * Settings activity launched from system TTS settings.
- * Allows configuration of voice, speed, and pitch.
+ * Shows installed voices and allows managing them.
  */
 class TtsSettingsActivity : AppCompatActivity() {
+
+    private lateinit var binding: ActivityTtsSettingsBinding
+    private lateinit var voiceManager: VoiceManager
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_tts_settings)
+        binding = ActivityTtsSettingsBinding.inflate(layoutInflater)
+        setContentView(binding.root)
+
+        voiceManager = VoiceManager(this)
+
+        binding.btnManageVoices.setOnClickListener {
+            startActivity(Intent(this, VoiceListActivity::class.java))
+        }
+
+        binding.btnOpenApp.setOnClickListener {
+            startActivity(Intent(this, MainActivity::class.java))
+            finish()
+        }
+
+        refreshVoiceInfo()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        refreshVoiceInfo()
+    }
+
+    private fun refreshVoiceInfo() {
+        lifecycleScope.launch {
+            val voices = withContext(Dispatchers.IO) {
+                voiceManager.listVoices()
+            }
+
+            if (voices.isEmpty()) {
+                binding.tvVoiceInfo.text = getString(R.string.no_voices_installed)
+            } else {
+                val voiceLines = voices.joinToString("\n") { voice ->
+                    "• ${voice.locale.displayLanguage} (${voice.locale.displayCountry}) — ${voice.name}"
+                }
+                binding.tvVoiceInfo.text = getString(
+                    R.string.installed_voices_summary,
+                    voices.size
+                ) + "\n" + voiceLines
+            }
+        }
     }
 }
