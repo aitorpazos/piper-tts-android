@@ -158,19 +158,34 @@ class PiperTtsService : TextToSpeechService() {
             Log.e(TAG, "Error listing voices", e)
         }
 
-        // Always advertise at least English so the engine is selectable.
+        // Always advertise at least the device's default locale and English
+        // so the engine is selectable regardless of which voices are installed.
         // Android uses onGetVoices to determine if the engine supports anything.
         if (voices.isEmpty()) {
+            val defaultLocale = Locale.getDefault()
             voices.add(
                 Voice(
-                    "en-us-default",
-                    Locale.US,
+                    "${defaultLocale.language}-${defaultLocale.country.lowercase().ifEmpty { "default" }}-default",
+                    defaultLocale,
                     Voice.QUALITY_NORMAL,
                     Voice.LATENCY_NORMAL,
-                    false,
-                    mutableSetOf("piperVoice")
+                    true,  // requiresNetworkConnection = true signals voice needs download
+                    mutableSetOf("piperVoice", "notInstalled")
                 )
             )
+            // Also add English if device locale is not English
+            if (defaultLocale.language != "en") {
+                voices.add(
+                    Voice(
+                        "en-us-default",
+                        Locale.US,
+                        Voice.QUALITY_NORMAL,
+                        Voice.LATENCY_NORMAL,
+                        true,
+                        mutableSetOf("piperVoice", "notInstalled")
+                    )
+                )
+            }
         }
 
         Log.i(TAG, "onGetVoices: returning ${voices.size} voices")
@@ -229,15 +244,14 @@ class PiperTtsService : TextToSpeechService() {
             emptyList()
         }
 
-        // If no voices installed yet, still claim English is available
+        // If no voices installed yet, still claim the language is available
         // so the engine remains selectable in Android TTS settings.
+        // Android probes this method for the device's default locale when
+        // deciding whether to show the engine. If we return LANG_NOT_SUPPORTED,
+        // some Android versions/OEMs hide the engine entirely.
         // Actual synthesis will prompt user to download a voice.
         if (voices.isEmpty()) {
-            return if (normLang == "en") {
-                TextToSpeech.LANG_AVAILABLE
-            } else {
-                TextToSpeech.LANG_NOT_SUPPORTED
-            }
+            return TextToSpeech.LANG_AVAILABLE
         }
 
         val exactMatch = voices.any {

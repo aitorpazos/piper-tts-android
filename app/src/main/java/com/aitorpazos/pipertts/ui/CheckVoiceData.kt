@@ -23,7 +23,6 @@ import android.content.Intent
 import android.os.Bundle
 import android.speech.tts.TextToSpeech
 import android.util.Log
-import com.aitorpazos.pipertts.util.VoiceManager
 
 /**
  * Handles the android.speech.tts.engine.CHECK_TTS_DATA intent.
@@ -32,9 +31,9 @@ import com.aitorpazos.pipertts.util.VoiceManager
  * is installed. Without this activity, the engine will NOT appear in
  * Android's "Preferred engine" list.
  *
- * CRITICAL: Must always return CHECK_VOICE_DATA_PASS so the engine appears
- * in Android TTS settings. If no voices are installed yet, we still report
- * English as available — the user can download voices via Voice Manager.
+ * CRITICAL: Must ALWAYS return CHECK_VOICE_DATA_PASS with at least one
+ * available locale. Any crash or missing result causes Android to hide
+ * the engine from TTS settings.
  *
  * Must return:
  * - TextToSpeech.Engine.CHECK_VOICE_DATA_PASS if voice data is available
@@ -50,40 +49,53 @@ class CheckVoiceData : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        val available = ArrayList<String>()
-        val unavailable = ArrayList<String>()
+        // Set a default result FIRST, before doing any work.
+        // This ensures that even if something crashes below, Android still
+        // gets a valid CHECK_VOICE_DATA_PASS result.
+        val defaultResult = Intent()
+        val defaultAvailable = ArrayList<String>()
+        defaultAvailable.add("eng-USA")  // Android's expected format for English
+        defaultResult.putStringArrayListExtra(TextToSpeech.Engine.EXTRA_AVAILABLE_VOICES, defaultAvailable)
+        defaultResult.putStringArrayListExtra(TextToSpeech.Engine.EXTRA_UNAVAILABLE_VOICES, ArrayList())
+        setResult(TextToSpeech.Engine.CHECK_VOICE_DATA_PASS, defaultResult)
 
         try {
-            val voiceManager = VoiceManager(this)
-            val voices = voiceManager.listVoices()
+            val available = ArrayList<String>()
+            val unavailable = ArrayList<String>()
 
-            for (voice in voices) {
-                // Android expects locale strings in the format used by Locale.toString()
-                // e.g., "en_US", "es_ES", "de_DE"
-                val lang = voice.locale.language
-                val country = voice.locale.country
-                available.add(if (country.isNotEmpty()) "${lang}_${country}" else lang)
+            try {
+                val voiceManager = com.aitorpazos.pipertts.util.VoiceManager(this)
+                val voices = voiceManager.listVoices()
+
+                for (voice in voices) {
+                    // Android expects locale strings in the format used by Locale.toString()
+                    // e.g., "en_US", "es_ES", "de_DE"
+                    val lang = voice.locale.language
+                    val country = voice.locale.country
+                    available.add(if (country.isNotEmpty()) "${lang}_${country}" else lang)
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Error listing voices for CHECK_TTS_DATA", e)
             }
+
+            // Always report at least English as available.
+            if (available.isEmpty()) {
+                available.add("eng-USA")
+            }
+
+            Log.i(TAG, "CHECK_TTS_DATA: available=$available")
+
+            val result = Intent()
+            result.putStringArrayListExtra(TextToSpeech.Engine.EXTRA_AVAILABLE_VOICES, available)
+            result.putStringArrayListExtra(TextToSpeech.Engine.EXTRA_UNAVAILABLE_VOICES, unavailable)
+
+            setResult(TextToSpeech.Engine.CHECK_VOICE_DATA_PASS, result)
         } catch (e: Exception) {
-            Log.w(TAG, "Error listing voices for CHECK_TTS_DATA", e)
+            // Even on total failure, the default result set above ensures
+            // Android gets CHECK_VOICE_DATA_PASS
+            Log.e(TAG, "Unexpected error in CheckVoiceData", e)
         }
 
-        // Always report at least English as available.
-        // This ensures the engine appears in Android TTS settings even before
-        // the user downloads any voice. The engine will prompt for download
-        // when synthesis is first attempted.
-        if (available.isEmpty()) {
-            available.add("en_US")
-        }
-
-        Log.i(TAG, "CHECK_TTS_DATA: available=$available")
-
-        val result = Intent()
-        result.putStringArrayListExtra(TextToSpeech.Engine.EXTRA_AVAILABLE_VOICES, available)
-        result.putStringArrayListExtra(TextToSpeech.Engine.EXTRA_UNAVAILABLE_VOICES, unavailable)
-
-        // Always return PASS so the engine is visible in Android settings
-        setResult(TextToSpeech.Engine.CHECK_VOICE_DATA_PASS, result)
         finish()
     }
 }
