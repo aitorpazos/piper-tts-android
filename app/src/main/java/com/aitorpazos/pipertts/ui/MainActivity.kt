@@ -18,13 +18,17 @@
 
 package com.aitorpazos.pipertts.ui
 
+import android.content.Intent
 import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioTrack
 import android.os.Bundle
+import android.provider.Settings
+import android.speech.tts.TextToSpeech
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
+import com.aitorpazos.pipertts.R
 import com.aitorpazos.pipertts.databinding.ActivityMainBinding
 import com.aitorpazos.pipertts.engine.PiperEngine
 import com.aitorpazos.pipertts.util.VoiceManager
@@ -46,6 +50,27 @@ class MainActivity : AppCompatActivity() {
 
         voiceManager = VoiceManager(this)
 
+        // === Installed Voices section ===
+        binding.btnManageVoices.setOnClickListener {
+            startActivity(Intent(this, VoiceListActivity::class.java))
+        }
+
+        // === TTS Engine section ===
+        binding.btnOpenTtsSettings.setOnClickListener {
+            try {
+                // Open Android TTS settings directly
+                startActivity(Intent("com.android.settings.TTS_SETTINGS"))
+            } catch (e: Exception) {
+                // Fallback to general settings
+                try {
+                    startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                } catch (e2: Exception) {
+                    Toast.makeText(this, R.string.tts_settings_not_found, Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+
+        // === Test TTS section ===
         binding.btnSpeak.setOnClickListener {
             val text = binding.etInput.text?.toString() ?: ""
             if (text.isNotBlank()) {
@@ -59,26 +84,64 @@ class MainActivity : AppCompatActivity() {
             stopPlayback()
         }
 
-        // Load available voices
-        updateVoiceInfo()
+        // Load info
+        refreshInstalledVoices()
+        checkTtsEngineStatus()
     }
 
-    private fun updateVoiceInfo() {
+    override fun onResume() {
+        super.onResume()
+        refreshInstalledVoices()
+        checkTtsEngineStatus()
+    }
+
+    private fun refreshInstalledVoices() {
         lifecycleScope.launch {
             val voices = withContext(Dispatchers.IO) {
                 voiceManager.listVoices()
             }
-            binding.tvStatus.text = if (voices.isEmpty()) {
-                "No voice models found.\nPlace .onnx + .onnx.json in assets/voices/"
+            if (voices.isEmpty()) {
+                binding.tvInstalledVoices.text = getString(R.string.no_voices_installed)
             } else {
-                "Available voices: ${voices.joinToString { "${it.name} (${it.locale})" }}"
+                val voiceLines = voices.joinToString("\n") { voice ->
+                    "• ${voice.locale.displayLanguage} (${voice.locale.displayCountry}) — ${voice.name}"
+                }
+                binding.tvInstalledVoices.text = getString(
+                    R.string.installed_voices_summary,
+                    voices.size
+                ) + "\n" + voiceLines
+            }
+        }
+    }
+
+    private fun checkTtsEngineStatus() {
+        lifecycleScope.launch {
+            try {
+                // Check if our engine is the default
+                val defaultEngine = Settings.Secure.getString(
+                    contentResolver,
+                    "tts_default_synth"
+                )
+                val isDefault = defaultEngine == packageName
+
+                if (isDefault) {
+                    binding.tvEngineStatus.text = getString(R.string.engine_status_active)
+                    binding.tvEngineStatus.setTextColor(getColor(R.color.engine_active))
+                } else {
+                    binding.tvEngineStatus.text = getString(
+                        R.string.engine_status_inactive,
+                        defaultEngine ?: getString(R.string.unknown)
+                    )
+                }
+            } catch (e: Exception) {
+                binding.tvEngineStatus.text = getString(R.string.engine_status_checking)
             }
         }
     }
 
     private fun synthesizeAndPlay(text: String) {
         binding.btnSpeak.isEnabled = false
-        binding.tvStatus.text = "Synthesizing..."
+        binding.tvStatus.text = getString(R.string.status_synthesizing)
 
         lifecycleScope.launch {
             try {
@@ -86,7 +149,7 @@ class MainActivity : AppCompatActivity() {
                     // Ensure engine is loaded
                     if (engine == null) {
                         val voiceData = voiceManager.loadVoice(java.util.Locale.US)
-                            ?: throw Exception("No voice model available")
+                            ?: throw Exception("No voice model available. Tap 'Manage' to download one.")
                         engine = PiperEngine(voiceData.config, voiceData.modelBytes)
                     }
 
@@ -96,15 +159,15 @@ class MainActivity : AppCompatActivity() {
                 }
 
                 if (pcmData.isEmpty()) {
-                    binding.tvStatus.text = "No audio generated"
+                    binding.tvStatus.text = getString(R.string.status_no_audio)
                     return@launch
                 }
 
                 playPcm(pcmData, engine!!.sampleRate)
-                binding.tvStatus.text = "Playing (${pcmData.size / 2} samples)"
+                binding.tvStatus.text = getString(R.string.status_playing, pcmData.size / 2)
 
             } catch (e: Exception) {
-                binding.tvStatus.text = "Error: ${e.message}"
+                binding.tvStatus.text = getString(R.string.status_error, e.message ?: "Unknown")
             } finally {
                 binding.btnSpeak.isEnabled = true
             }

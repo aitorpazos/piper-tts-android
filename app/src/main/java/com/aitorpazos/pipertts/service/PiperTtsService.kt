@@ -23,6 +23,7 @@ import android.speech.tts.SynthesisCallback
 import android.speech.tts.SynthesisRequest
 import android.speech.tts.TextToSpeech
 import android.speech.tts.TextToSpeechService
+import android.speech.tts.Voice
 import android.util.Log
 import com.aitorpazos.pipertts.engine.PiperEngine
 import com.aitorpazos.pipertts.util.VoiceManager
@@ -33,35 +34,140 @@ import java.util.Locale
  *
  * This service registers as a system TTS provider, allowing any app to use
  * Piper TTS for speech synthesis through the standard Android TTS API.
+ *
+ * Key requirements for Android to accept this as a TTS engine:
+ * 1. Declared as a service with BIND_TEXT_TO_SPEECH_SERVICE permission
+ * 2. Intent filter for android.intent.action.TTS_SERVICE
+ * 3. Meta-data pointing to tts_engine.xml
+ * 4. Properly implements onIsLanguageAvailable, onLoadLanguage, onGetLanguage
+ * 5. Implements onGetVoices to advertise available voices
  */
 class PiperTtsService : TextToSpeechService() {
 
     companion object {
         private const val TAG = "PiperTtsService"
-
-        // Supported languages - can be expanded with more voice models
-        private val SUPPORTED_LANGUAGES = mapOf(
-            "eng" to Locale.US,     // en_US
-            "fra" to Locale.FRANCE, // fr_FR
-            "deu" to Locale.GERMANY, // de_DE
-            "spa" to Locale("es", "ES"),
-            "ita" to Locale.ITALY,
-            "por" to Locale("pt", "BR"),
-            "nld" to Locale("nl", "NL"),
-            "pol" to Locale("pl", "PL"),
-            "rus" to Locale("ru", "RU"),
-            "zho" to Locale.CHINA,
-        )
     }
 
     private var engine: PiperEngine? = null
     private var currentLocale: Locale = Locale.US
+    private var currentVoiceName: String? = null
     private lateinit var voiceManager: VoiceManager
 
     override fun onCreate() {
         super.onCreate()
         Log.i(TAG, "PiperTtsService created")
         voiceManager = VoiceManager(this)
+
+        // Pre-load default voice if available
+        try {
+            val voices = voiceManager.listVoices()
+            if (voices.isNotEmpty()) {
+                val defaultVoice = voices.find { it.locale.language == "en" } ?: voices.first()
+                loadVoiceForLocale(defaultVoice.locale)
+                Log.i(TAG, "Pre-loaded default voice: ${defaultVoice.name}")
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to pre-load default voice", e)
+        }
+    }
+
+    /**
+     * Return the list of voices available from this TTS engine.
+     * Android TTS framework calls this to populate the voice list in Settings.
+     */
+    override fun onGetVoices(): List<Voice> {
+        val voices = mutableListOf<Voice>()
+        try {
+            val piperVoices = voiceManager.listVoices()
+            for (pv in piperVoices) {
+                val features = mutableSetOf<String>()
+                features.add("piperVoice")
+
+                val quality = when {
+                    pv.quality.contains("high", ignoreCase = true) -> Voice.QUALITY_VERY_HIGH
+                    pv.quality.contains("medium", ignoreCase = true) -> Voice.QUALITY_NORMAL
+                    pv.quality.contains("low", ignoreCase = true) -> Voice.QUALITY_LOW
+                    else -> Voice.QUALITY_NORMAL
+                }
+
+                val latency = if (pv.isAsset) {
+                    Voice.LATENCY_NORMAL
+                } else {
+                    Voice.LATENCY_NORMAL
+                }
+
+                val voice = Voice(
+                    pv.name,                              // unique name
+                    pv.locale,                            // locale
+                    quality,                              // quality
+                    latency,                              // latency
+                    false,                                // requiresNetworkConnection
+                    features                              // features set
+                )
+                voices.add(voice)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error listing voices", e)
+        }
+
+        // If no voices installed, still advertise English as available
+        // (it will prompt the user to download)
+        if (voices.isEmpty()) {
+            voices.add(
+                Voice(
+                    "en-us-default",
+                    Locale.US,
+                    Voice.QUALITY_NORMAL,
+                    Voice.LATENCY_NORMAL,
+                    false,
+                    mutableSetOf("piperVoice")
+                )
+            )
+        }
+
+        Log.i(TAG, "onGetVoices: returning ${voices.size} voices")
+        return voices
+    }
+
+    /**
+     * Called when the TTS framework wants to use a specific voice by name.
+     */
+    override fun onLoadVoice(voiceName: String?): Int {
+        if (voiceName == null) return TextToSpeech.ERROR
+
+        Log.i(TAG, "onLoadVoice: $voiceName")
+
+        try {
+            val voiceData = voiceManager.loadVoiceByName(voiceName)
+            if (voiceData != null) {
+                engine?.close()
+                engine = PiperEngine(voiceData.config, voiceData.modelBytes)
+                currentLocale = voiceData.locale
+                currentVoiceName = voiceName
+                return TextToSpeech.SUCCESS
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to load voice: $voiceName", e)
+        }
+
+        return TextToSpeech.ERROR
+    }
+
+    /**
+     * Return the default voice name for the given locale.
+     */
+    override fun onGetDefaultVoiceNameForLocale(lang: String?, country: String?, variant: String?): String? {
+        if (lang == null) return null
+
+        val locale = Locale(lang, country ?: "", variant ?: "")
+        val voices = voiceManager.listVoices()
+
+        val match = voices.find { it.locale.language == locale.language && it.locale.country == locale.country }
+            ?: voices.find { it.locale.language == locale.language }
+            ?: voices.find { it.locale.language == "en" }
+            ?: voices.firstOrNull()
+
+        return match?.name
     }
 
     override fun onIsLanguageAvailable(lang: String?, country: String?, variant: String?): Int {
@@ -70,12 +176,13 @@ class PiperTtsService : TextToSpeechService() {
         val locale = Locale(lang, country ?: "", variant ?: "")
 
         // Check if we have a voice model for this language
-        val hasModel = voiceManager.hasVoiceForLocale(locale)
+        val voices = voiceManager.listVoices()
+        val exactMatch = voices.any { it.locale.language == locale.language && it.locale.country == locale.country }
+        val langMatch = voices.any { it.locale.language == locale.language }
 
         return when {
-            hasModel && !country.isNullOrEmpty() -> TextToSpeech.LANG_COUNTRY_AVAILABLE
-            hasModel -> TextToSpeech.LANG_AVAILABLE
-            voiceManager.hasVoiceForLanguage(lang) -> TextToSpeech.LANG_AVAILABLE
+            exactMatch -> TextToSpeech.LANG_COUNTRY_AVAILABLE
+            langMatch -> TextToSpeech.LANG_AVAILABLE
             else -> TextToSpeech.LANG_NOT_SUPPORTED
         }
     }
@@ -111,7 +218,8 @@ class PiperTtsService : TextToSpeechService() {
 
             engine = PiperEngine(voiceData.config, voiceData.modelBytes)
             currentLocale = locale
-            Log.i(TAG, "Loaded voice for locale: $locale")
+            currentVoiceName = voiceData.name
+            Log.i(TAG, "Loaded voice for locale: $locale (${voiceData.name})")
             return TextToSpeech.LANG_COUNTRY_AVAILABLE
         } catch (e: Exception) {
             Log.e(TAG, "Failed to load voice for locale: $locale", e)
@@ -136,6 +244,12 @@ class PiperTtsService : TextToSpeechService() {
             if (requestLocale.language != currentLocale.language) {
                 loadVoiceForLocale(requestLocale)
             }
+        }
+
+        // Check if a specific voice was requested
+        val requestedVoiceName = request.voiceName
+        if (requestedVoiceName != null && requestedVoiceName != currentVoiceName) {
+            onLoadVoice(requestedVoiceName)
         }
 
         val currentEngine = engine
