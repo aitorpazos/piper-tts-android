@@ -267,7 +267,7 @@ class PiperTtsService : TextToSpeechService() {
     }
 
     override fun onSynthesizeText(request: SynthesisRequest, callback: SynthesisCallback) {
-        val text = request.charSequenceText?.toString() ?: request.text ?: ""
+        val text = request.charSequenceText?.toString() ?: ""
         if (text.isBlank()) {
             callback.done()
             return

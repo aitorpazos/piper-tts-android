@@ -22,6 +22,7 @@ import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
 import android.speech.tts.TextToSpeech
+import android.util.Log
 import com.aitorpazos.pipertts.util.VoiceManager
 
 /**
@@ -38,6 +39,10 @@ import com.aitorpazos.pipertts.util.VoiceManager
  */
 class CheckVoiceData : Activity() {
 
+    companion object {
+        private const val TAG = "CheckVoiceData"
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -47,26 +52,32 @@ class CheckVoiceData : Activity() {
         val available = ArrayList<String>()
         val unavailable = ArrayList<String>()
 
-        if (voices.isNotEmpty()) {
-            for (voice in voices) {
-                // Format: "eng-USA" (ISO3 language - ISO3 country) or "eng-usa"
-                val lang = voice.locale.isO3Language ?: voice.locale.language
-                val country = voice.locale.isO3Country ?: voice.locale.country
+        for (voice in voices) {
+            try {
+                val lang = voice.locale.isO3Language
+                val country = voice.locale.isO3Country
+                available.add(if (country.isNotEmpty()) "$lang-$country" else lang)
+            } catch (e: Exception) {
+                // Fallback to 2-letter codes
+                val lang = voice.locale.language
+                val country = voice.locale.country
                 available.add(if (country.isNotEmpty()) "$lang-$country" else lang)
             }
         }
+
+        // Always report at least English as available since we have a bundled voice
+        if (available.isEmpty()) {
+            available.add("eng-USA")
+        }
+
+        Log.i(TAG, "CHECK_TTS_DATA: available=$available")
 
         val result = Intent()
         result.putStringArrayListExtra(TextToSpeech.Engine.EXTRA_AVAILABLE_VOICES, available)
         result.putStringArrayListExtra(TextToSpeech.Engine.EXTRA_UNAVAILABLE_VOICES, unavailable)
 
-        if (available.isNotEmpty()) {
-            setResult(TextToSpeech.Engine.CHECK_VOICE_DATA_PASS, result)
-        } else {
-            // No voices installed — tell Android data needs to be installed
-            setResult(TextToSpeech.Engine.CHECK_VOICE_DATA_FAIL, result)
-        }
-
+        // Always return PASS — we have at least the bundled English voice in assets
+        setResult(TextToSpeech.Engine.CHECK_VOICE_DATA_PASS, result)
         finish()
     }
 }
