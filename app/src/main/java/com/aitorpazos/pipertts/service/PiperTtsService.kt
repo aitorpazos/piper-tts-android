@@ -156,10 +156,8 @@ class PiperTtsService : TextToSpeechService() {
     /**
      * Return the default voice name for the given locale.
      */
-    override fun onGetDefaultVoiceNameForLocale(lang: String?, country: String?, variant: String?): String? {
-        if (lang == null) return null
-
-        val locale = Locale(lang, country ?: "", variant ?: "")
+    public override fun onGetDefaultVoiceNameForLocale(lang: String, country: String, variant: String): String {
+        val locale = Locale(lang, country, variant)
         val voices = voiceManager.listVoices()
 
         val match = voices.find { it.locale.language == locale.language && it.locale.country == locale.country }
@@ -167,7 +165,7 @@ class PiperTtsService : TextToSpeechService() {
             ?: voices.find { it.locale.language == "en" }
             ?: voices.firstOrNull()
 
-        return match?.name
+        return match?.name ?: "en-us-default"
     }
 
     override fun onIsLanguageAvailable(lang: String?, country: String?, variant: String?): Int {
