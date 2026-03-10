@@ -58,16 +58,11 @@ class CheckVoiceData : Activity() {
             val voices = voiceManager.listVoices()
 
             for (voice in voices) {
-                try {
-                    val lang = voice.locale.isO3Language
-                    val country = voice.locale.isO3Country
-                    available.add(if (country.isNotEmpty()) "$lang-$country" else lang)
-                } catch (e: Exception) {
-                    // Fallback to 2-letter codes
-                    val lang = voice.locale.language
-                    val country = voice.locale.country
-                    available.add(if (country.isNotEmpty()) "$lang-$country" else lang)
-                }
+                // Android expects locale strings in the format used by Locale.toString()
+                // e.g., "en_US", "es_ES", "de_DE"
+                val lang = voice.locale.language
+                val country = voice.locale.country
+                available.add(if (country.isNotEmpty()) "${lang}_${country}" else lang)
             }
         } catch (e: Exception) {
             Log.w(TAG, "Error listing voices for CHECK_TTS_DATA", e)
@@ -78,7 +73,7 @@ class CheckVoiceData : Activity() {
         // the user downloads any voice. The engine will prompt for download
         // when synthesis is first attempted.
         if (available.isEmpty()) {
-            available.add("eng-USA")
+            available.add("en_US")
         }
 
         Log.i(TAG, "CHECK_TTS_DATA: available=$available")

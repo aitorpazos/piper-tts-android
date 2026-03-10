@@ -177,6 +177,10 @@ class PiperTtsService : TextToSpeechService() {
 
     /**
      * Called when the TTS framework wants to use a specific voice by name.
+     *
+     * CRITICAL: Must return SUCCESS for placeholder voice names (e.g. "en-us-default")
+     * even when no actual voice model is installed. Returning ERROR causes Android to
+     * consider the engine broken and remove it from TTS settings.
      */
     override fun onLoadVoice(voiceName: String?): Int {
         if (voiceName == null) return TextToSpeech.ERROR
@@ -196,7 +200,12 @@ class PiperTtsService : TextToSpeechService() {
             Log.e(TAG, "Failed to load voice: $voiceName", e)
         }
 
-        return TextToSpeech.ERROR
+        // If voice not found, it may be a placeholder name (e.g. "en-us-default").
+        // Return SUCCESS anyway so Android doesn't mark the engine as broken.
+        // Actual synthesis will handle the missing engine gracefully.
+        Log.i(TAG, "Voice '$voiceName' not found on disk, returning SUCCESS for engine visibility")
+        currentVoiceName = voiceName
+        return TextToSpeech.SUCCESS
     }
 
     /**
@@ -247,6 +256,34 @@ class PiperTtsService : TextToSpeechService() {
         )
     }
 
+    /**
+     * Return a default voice name for a given locale.
+     * Android calls this when selecting the engine — returning a non-null value
+     * is critical for the engine to appear in TTS settings on many devices.
+     */
+    override fun onGetDefaultVoiceNameForLocale(lang: String?, country: String?, variant: String?): String {
+        if (lang == null) return "en-us-default"
+
+        val normLang = normaliseLanguage(lang)
+        val normCountry = normaliseCountry(country ?: "")
+
+        try {
+            val voices = voiceManager.listVoices()
+            // Try exact match first, then language match
+            val match = voices.find {
+                it.locale.language == normLang &&
+                (normCountry.isEmpty() || it.locale.country.equals(normCountry, ignoreCase = true))
+            } ?: voices.find { it.locale.language == normLang }
+
+            if (match != null) return match.name
+        } catch (e: Exception) {
+            Log.w(TAG, "Error finding default voice for $lang-$country", e)
+        }
+
+        // Return a placeholder name — must not be empty or null
+        return if (normCountry.isNotEmpty()) "$normLang-${normCountry.lowercase()}-default" else "$normLang-default"
+    }
+
     override fun onLoadLanguage(lang: String?, country: String?, variant: String?): Int {
         val availability = onIsLanguageAvailable(lang, country, variant)
         if (availability == TextToSpeech.LANG_NOT_SUPPORTED) {
@@ -256,20 +293,32 @@ class PiperTtsService : TextToSpeechService() {
         val normLang = normaliseLanguage(lang ?: "en")
         val normCountry = normaliseCountry(country ?: "")
         val locale = Locale(normLang, normCountry, variant ?: "")
-        return loadVoiceForLocale(locale)
+
+        // Try to actually load the voice model
+        val loadResult = loadVoiceForLocale(locale)
+
+        // CRITICAL: Even if we can't load the actual model (no voices downloaded yet),
+        // return the same availability we reported in onIsLanguageAvailable.
+        // Returning LANG_NOT_SUPPORTED here when onIsLanguageAvailable said LANG_AVAILABLE
+        // causes Android to consider the engine broken and hide it from TTS settings.
+        if (loadResult == TextToSpeech.LANG_NOT_SUPPORTED) {
+            Log.i(TAG, "No voice model for $locale yet, but reporting as available for engine visibility")
+            return availability
+        }
+
+        return loadResult
     }
 
     private fun loadVoiceForLocale(locale: Locale): Int {
         try {
-            // Close existing engine
-            engine?.close()
-
             val voiceData = voiceManager.loadVoice(locale)
             if (voiceData == null) {
                 Log.w(TAG, "No voice found for locale: $locale")
                 return TextToSpeech.LANG_NOT_SUPPORTED
             }
 
+            // Only close existing engine after we confirmed we have a new voice
+            engine?.close()
             engine = PiperEngine(voiceData.config, voiceData.modelBytes)
             currentLocale = locale
             currentVoiceName = voiceData.name
@@ -312,14 +361,20 @@ class PiperTtsService : TextToSpeechService() {
         if (currentEngine == null) {
             Log.e(TAG, "No engine loaded, attempting to load default")
             if (loadVoiceForLocale(Locale.US) == TextToSpeech.LANG_NOT_SUPPORTED) {
-                callback.error()
+                // No voice installed — return silence instead of error
+                // to avoid Android marking the engine as broken
+                Log.w(TAG, "No voice models installed yet, returning silence")
+                callback.start(22050, AudioFormat.ENCODING_PCM_16BIT, 1)
+                callback.done()
                 return
             }
         }
 
         try {
             val activeEngine = engine ?: run {
-                callback.error()
+                Log.w(TAG, "Engine still null after load attempt, returning silence")
+                callback.start(22050, AudioFormat.ENCODING_PCM_16BIT, 1)
+                callback.done()
                 return
             }
 
