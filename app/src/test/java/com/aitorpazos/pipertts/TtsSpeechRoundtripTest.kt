@@ -58,11 +58,45 @@ class TtsSpeechRoundtripTest {
         private const val VOSK_EN_URL = "https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip"
         private const val VOSK_ES_URL = "https://alphacephei.com/vosk/models/vosk-model-small-es-0.42.zip"
 
-        private const val EN_TEXT = "The quick brown fox jumps over the lazy dog in the park"
-        private const val ES_TEXT = "El rápido zorro marrón salta sobre el perro perezoso en la plaza grande"
+        // ~100-word texts with punctuation marks for thorough roundtrip testing
+        private const val EN_TEXT = "The quick brown fox jumps over the lazy dog in the park. " +
+            "Meanwhile, the curious cat watches from the window, wondering if it should go outside. " +
+            "Birds are singing loudly; the morning sun is warm and bright. " +
+            "\"What a beautiful day!\" said the old farmer, walking slowly toward the river. " +
+            "He carried a basket full of apples, oranges, and fresh bread. " +
+            "The children were playing near the bridge — laughing, running, and shouting with joy. " +
+            "Suddenly, a loud thunder echoed across the valley: the storm was approaching fast. " +
+            "Everyone hurried back home, hoping the rain wouldn't last too long."
 
-        private val EN_KEYWORDS = listOf("the", "quick", "brown", "fox", "jumps", "over", "lazy", "dog", "in", "park")
-        private val ES_KEYWORDS = listOf("el", "rápido", "zorro", "marrón", "salta", "sobre", "perro", "perezoso", "plaza", "grande")
+        private const val ES_TEXT = "El rápido zorro marrón salta sobre el perro perezoso en la plaza grande. " +
+            "Mientras tanto, el gato curioso observa desde la ventana, preguntándose si debería salir. " +
+            "Los pájaros cantan con fuerza; el sol de la mañana es cálido y brillante. " +
+            "\"¡Qué día tan hermoso!\" dijo el viejo granjero, caminando despacio hacia el río. " +
+            "Llevaba una cesta llena de manzanas, naranjas y pan fresco. " +
+            "Los niños jugaban cerca del puente — riendo, corriendo y gritando de alegría. " +
+            "De repente, un fuerte trueno resonó por todo el valle: la tormenta se acercaba rápido. " +
+            "Todos corrieron a casa, esperando que la lluvia no durara demasiado."
+
+        private val EN_KEYWORDS = listOf(
+            "fox", "jumps", "lazy", "dog", "park",
+            "cat", "watches", "window", "outside",
+            "birds", "singing", "morning", "sun", "warm", "bright",
+            "beautiful", "day", "farmer", "walking", "river",
+            "basket", "apples", "oranges", "bread",
+            "children", "playing", "bridge", "laughing", "running",
+            "thunder", "valley", "storm", "approaching",
+            "hurried", "home", "rain"
+        )
+        private val ES_KEYWORDS = listOf(
+            "zorro", "salta", "perro", "perezoso", "plaza",
+            "gato", "curioso", "ventana", "salir",
+            "pájaros", "cantan", "sol", "mañana", "cálido", "brillante",
+            "hermoso", "granjero", "caminando", "río",
+            "cesta", "manzanas", "naranjas", "pan",
+            "niños", "jugaban", "puente", "riendo", "corriendo",
+            "trueno", "valle", "tormenta", "acercaba",
+            "corrieron", "casa", "lluvia"
+        )
     }
 
     private lateinit var cacheDir: File
