@@ -58,11 +58,11 @@ class TtsSpeechRoundtripTest {
         private const val VOSK_EN_URL = "https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip"
         private const val VOSK_ES_URL = "https://alphacephei.com/vosk/models/vosk-model-small-es-0.42.zip"
 
-        private const val EN_TEXT = "The quick brown fox jumps over the lazy dog"
-        private const val ES_TEXT = "El rápido zorro marrón salta sobre el perro perezoso"
+        private const val EN_TEXT = "The quick brown fox jumps over the lazy dog in the park"
+        private const val ES_TEXT = "El rápido zorro marrón salta sobre el perro perezoso en la plaza grande"
 
-        private val EN_KEYWORDS = listOf("quick", "brown", "fox", "jumps", "over", "lazy", "dog")
-        private val ES_KEYWORDS = listOf("rápido", "zorro", "marrón", "salta", "perro", "perezoso")
+        private val EN_KEYWORDS = listOf("the", "quick", "brown", "fox", "jumps", "over", "lazy", "dog", "in", "park")
+        private val ES_KEYWORDS = listOf("el", "rápido", "zorro", "marrón", "salta", "sobre", "perro", "perezoso", "plaza", "grande")
     }
 
     private lateinit var cacheDir: File
