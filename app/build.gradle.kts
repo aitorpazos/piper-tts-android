@@ -149,6 +149,9 @@ dependencies {
     androidTestImplementation("androidx.test:rules:1.5.0")
     androidTestImplementation("androidx.test:core:1.5.0")
 
-    // Vosk offline STT for roundtrip tests
-    androidTestImplementation("com.alphacephei:vosk-android:0.3.47")
+    // ONNX Runtime JVM for roundtrip unit tests (runs on CI without Android emulator)
+    testImplementation("com.microsoft.onnxruntime:onnxruntime:1.17.0")
+
+    // Vosk JVM for offline STT in roundtrip unit tests
+    testImplementation("com.alphacephei:vosk:0.3.45")
 }
