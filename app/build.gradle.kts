@@ -11,8 +11,8 @@ android {
         applicationId = "com.aitorpazos.pipertts"
         minSdk = 24
         targetSdk = 34
-        versionCode = 12
-        versionName = "1.9.0"
+        versionCode = 13
+        versionName = "1.10.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -148,4 +148,7 @@ dependencies {
     androidTestImplementation("androidx.test:runner:1.5.2")
     androidTestImplementation("androidx.test:rules:1.5.0")
     androidTestImplementation("androidx.test:core:1.5.0")
+
+    // Vosk offline STT for roundtrip tests
+    androidTestImplementation("com.alphacephei:vosk-android:0.3.47")
 }
