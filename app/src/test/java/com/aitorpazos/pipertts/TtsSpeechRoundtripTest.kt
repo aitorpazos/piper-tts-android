@@ -22,17 +22,14 @@ import org.junit.Before
 import org.junit.Test
 import org.vosk.Model
 import org.vosk.Recognizer
-import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.net.URI
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import java.nio.FloatBuffer
 import java.nio.LongBuffer
 import java.util.zip.ZipInputStream
-import javax.sound.sampled.AudioFileFormat
-import javax.sound.sampled.AudioFormat
-import javax.sound.sampled.AudioInputStream
-import javax.sound.sampled.AudioSystem
 
 /**
  * Pure JVM roundtrip test: TTS synthesis with Piper (ONNX Runtime) -> STT with Vosk.
@@ -181,6 +178,7 @@ class TtsSpeechRoundtripTest {
     // -- Audio conversion --
 
     private fun floatsToWav(samples: FloatArray, sampleRate: Int): ByteArray {
+        // Convert float samples to 16-bit PCM
         val pcm = ByteArray(samples.size * 2)
         for (i in samples.indices) {
             val clamped = samples[i].coerceIn(-1.0f, 1.0f)
@@ -189,12 +187,38 @@ class TtsSpeechRoundtripTest {
             pcm[i * 2 + 1] = (intVal.toInt() shr 8 and 0xFF).toByte()
         }
 
-        val format = AudioFormat(sampleRate.toFloat(), 16, 1, true, false)
-        val audioStream = AudioInputStream(
-            ByteArrayInputStream(pcm), format, samples.size.toLong()
-        )
-        val baos = ByteArrayOutputStream()
-        AudioSystem.write(audioStream, AudioFileFormat.Type.WAVE, baos)
+        // Build WAV file manually (no javax.sound.sampled dependency)
+        val numChannels: Short = 1
+        val bitsPerSample: Short = 16
+        val byteRate = sampleRate * numChannels * bitsPerSample / 8
+        val blockAlign: Short = (numChannels * bitsPerSample / 8).toShort()
+        val dataSize = pcm.size
+        val chunkSize = 36 + dataSize
+
+        val baos = ByteArrayOutputStream(44 + dataSize)
+        val header = ByteBuffer.allocate(44).order(ByteOrder.LITTLE_ENDIAN)
+
+        // RIFF header
+        header.put("RIFF".toByteArray())
+        header.putInt(chunkSize)
+        header.put("WAVE".toByteArray())
+
+        // fmt sub-chunk
+        header.put("fmt ".toByteArray())
+        header.putInt(16)                    // sub-chunk size
+        header.putShort(1)                   // PCM format
+        header.putShort(numChannels)
+        header.putInt(sampleRate)
+        header.putInt(byteRate)
+        header.putShort(blockAlign)
+        header.putShort(bitsPerSample)
+
+        // data sub-chunk
+        header.put("data".toByteArray())
+        header.putInt(dataSize)
+
+        baos.write(header.array())
+        baos.write(pcm)
         return baos.toByteArray()
     }
 
