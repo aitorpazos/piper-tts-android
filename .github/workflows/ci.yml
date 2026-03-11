@@ -22,8 +22,19 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
+      - name: Install espeak-ng (for TTS phonemization in roundtrip tests)
+        run: sudo apt-get update && sudo apt-get install -y espeak-ng
+
       - name: Run unit tests
-        run: ./gradlew testDebugUnitTest
+        run: ./gradlew testDebugUnitTest --info
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: app/build/reports/tests/testDebugUnitTest/
+          retention-days: 7
 
       - name: Build debug APK
         run: ./gradlew assembleDebug

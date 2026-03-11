@@ -130,9 +130,21 @@ class TtsSpeechRoundtripTest {
 
     // -- TTS synthesis (pure ONNX Runtime JVM, no android.util.Log) --
 
+    /**
+     * Synthesize speech using Piper ONNX model.
+     *
+     * For espeak-based models (phoneme_type == "espeak"), uses espeak-ng CLI
+     * to convert text to IPA phonemes before mapping to phoneme IDs.
+     * Falls back to character-based mapping for text-type models.
+     */
     private fun synthesize(modelBytes: ByteArray, config: PiperVoiceConfig, text: String): FloatArray {
-        val phonemeConverter = PhonemeConverter(config.phonemeIdMap ?: emptyMap())
-        val phonemeIds = phonemeConverter.textToPhonemeIds(text)
+        val phonemeIdMap = config.phonemeIdMap ?: emptyMap()
+        val phonemeIds = if (config.phonemeType == "espeak") {
+            val espeakVoice = config.espeak?.voice ?: "en-us"
+            textToPhonemeIdsViaEspeak(text, espeakVoice, phonemeIdMap)
+        } else {
+            PhonemeConverter(phonemeIdMap).textToPhonemeIds(text)
+        }
         if (phonemeIds.isEmpty()) return FloatArray(0)
 
         val ortEnv = OrtEnvironment.getEnvironment()
@@ -173,6 +185,52 @@ class TtsSpeechRoundtripTest {
             inputs.values.forEach { it.close() }
             session.close()
         }
+    }
+
+    /**
+     * Convert text to phoneme IDs using espeak-ng for IPA phonemization.
+     * Runs `espeak-ng --ipa -q -v <voice> "<text>"` and maps each IPA character
+     * to its phoneme ID using the model's phoneme_id_map.
+     */
+    private fun textToPhonemeIdsViaEspeak(
+        text: String,
+        espeakVoice: String,
+        phonemeIdMap: Map<String, List<Int>>
+    ): LongArray {
+        // Run espeak-ng to get IPA phonemes
+        val process = ProcessBuilder(
+            "espeak-ng", "--ipa", "-q", "-v", espeakVoice, text
+        ).redirectErrorStream(true).start()
+        val ipaOutput = process.inputStream.bufferedReader().readText().trim()
+        process.waitFor()
+
+        println("espeak-ng IPA output: $ipaOutput")
+
+        val ids = mutableListOf<Long>()
+        val padId = phonemeIdMap["_"]?.firstOrNull()?.toLong() ?: 0L
+        val bosIds = phonemeIdMap["^"]?.map { it.toLong() }
+        val eosIds = phonemeIdMap["$"]?.map { it.toLong() }
+
+        // BOS
+        bosIds?.let { ids.addAll(it) }
+        ids.add(padId)
+
+        // Process each IPA character/symbol
+        for (char in ipaOutput) {
+            val charStr = char.toString()
+            val charIds = phonemeIdMap[charStr]?.map { it.toLong() }
+            if (charIds != null) {
+                ids.addAll(charIds)
+                ids.add(padId)
+            }
+            // Skip characters not in the phoneme map (stress marks, etc.)
+        }
+
+        // EOS
+        eosIds?.let { ids.addAll(it) }
+        ids.add(padId)
+
+        return ids.toLongArray()
     }
 
     // -- Audio conversion --
