@@ -88,14 +88,14 @@ class TtsSpeechRoundtripTest {
             "hurried", "home", "rain"
         )
         private val ES_KEYWORDS = listOf(
-            "zorro", "salta", "perro", "perezoso", "plaza",
-            "gato", "curioso", "ventana", "salir",
-            "pájaros", "cantan", "sol", "mañana", "cálido", "brillante",
-            "hermoso", "granjero", "caminando", "río",
-            "cesta", "manzanas", "naranjas", "pan",
+            "marrón", "salta", "perro", "perezoso", "plaza",
+            "curioso", "ventana", "mientras",
+            "cantan", "fuerza", "sol", "mañana", "cálido", "brillante",
+            "hermoso", "viejo", "caminando", "despacio", "río",
+            "cesta", "manzanas", "naranjas", "pan", "fresco",
             "niños", "jugaban", "puente", "riendo", "corriendo",
-            "trueno", "valle", "tormenta", "acercaba",
-            "corrieron", "casa", "lluvia"
+            "valle", "tormenta", "acercaba",
+            "corrieron", "casa", "lluvia", "demasiado"
         )
     }
 
