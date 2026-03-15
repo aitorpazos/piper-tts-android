@@ -58,44 +58,154 @@ class TtsSpeechRoundtripTest {
         private const val VOSK_EN_URL = "https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip"
         private const val VOSK_ES_URL = "https://alphacephei.com/vosk/models/vosk-model-small-es-0.42.zip"
 
-        // ~100-word texts with punctuation marks for thorough roundtrip testing
-        private const val EN_TEXT = "The quick brown fox jumps over the lazy dog in the park. " +
-            "Meanwhile, the curious cat watches from the window, wondering if it should go outside. " +
-            "Birds are singing loudly; the morning sun is warm and bright. " +
-            "\"What a beautiful day!\" said the old farmer, walking slowly toward the river. " +
-            "He carried a basket full of apples, oranges, and fresh bread. " +
-            "The children were playing near the bridge — laughing, running, and shouting with joy. " +
-            "Suddenly, a loud thunder echoed across the valley: the storm was approaching fast. " +
-            "Everyone hurried back home, hoping the rain wouldn't last too long."
+        // ~500-word texts with punctuation marks for thorough roundtrip testing
+        private const val EN_TEXT = "The quick brown fox jumps over the lazy dog in the park on a warm summer afternoon. " +
+            "Meanwhile, the curious cat watches from the window, wondering if it should go outside to explore the garden. " +
+            "Birds are singing loudly in the tall oak trees; the morning sun is warm and bright, casting golden shadows across the freshly mowed lawn. " +
+            "\"What a beautiful day!\" said the old farmer, walking slowly toward the river with his wooden cane. " +
+            "He carried a basket full of apples, oranges, and fresh bread from the village bakery. " +
+            "The children were playing near the stone bridge, laughing, running, and shouting with pure joy as they chased each other through the meadow. " +
+            "Suddenly, a loud thunder echoed across the valley: the storm was approaching fast from the western mountains. " +
+            "Everyone hurried back home, hoping the rain would not last too long. " +
+            "The dark clouds gathered quickly, blocking the sunlight and turning the sky into a deep shade of grey. " +
+            "The old woman next door closed her wooden shutters and brought the laundry inside before the first drops began to fall. " +
+            "Her garden was filled with roses, tulips, and sunflowers that swayed gently in the growing wind. " +
+            "She had spent the entire morning watering the plants and trimming the hedges along the narrow path. " +
+            "Down by the harbor, the fishermen secured their boats with thick ropes and heavy anchors. " +
+            "The waves were getting stronger, crashing against the wooden dock with increasing force. " +
+            "Captain Rodriguez shouted instructions to his crew, making sure every sail was properly folded and every hatch was tightly sealed. " +
+            "At the local school, the teacher gathered the students inside the classroom and started reading a story about brave explorers who traveled across the ocean to discover new lands. " +
+            "The children listened carefully, their eyes wide with excitement and wonder. " +
+            "Some of them drew pictures of ships and treasure maps while others wrote short poems about the sea. " +
+            "The hospital on the eastern side of town remained busy throughout the afternoon. " +
+            "Doctors and nurses worked together to help patients recover from various illnesses. " +
+            "The pharmacy next door provided medicine and supplies to families who needed them most during the difficult season. " +
+            "By evening, the storm had passed and the sky cleared up, revealing a magnificent rainbow stretching from one horizon to the other. " +
+            "People came outside to admire the colors and breathe the fresh air that smelled of wet earth and pine trees. " +
+            "The temperature dropped slightly, bringing a pleasant coolness after the humid afternoon. " +
+            "The restaurant on the main street opened its doors for dinner service. " +
+            "The chef prepared a special menu featuring grilled salmon, roasted vegetables, mushroom soup, and chocolate cake for dessert. " +
+            "Families and friends gathered around tables, sharing stories and laughter while enjoying the delicious food and warm atmosphere. " +
+            "As night fell, the streetlights flickered on one by one, illuminating the quiet roads and peaceful neighborhoods. " +
+            "The moon appeared behind the remaining clouds, casting a silver glow over the sleeping town. " +
+            "Tomorrow would bring another day full of possibilities, adventures, and memories waiting to be created."
 
-        private const val ES_TEXT = "El rápido zorro marrón salta sobre el perro perezoso en la plaza grande. " +
-            "Mientras tanto, el gato curioso observa desde la ventana, preguntándose si debería salir. " +
-            "Los pájaros cantan con fuerza; el sol de la mañana es cálido y brillante. " +
-            "\"¡Qué día tan hermoso!\" dijo el viejo granjero, caminando despacio hacia el río. " +
-            "Llevaba una cesta llena de manzanas, naranjas y pan fresco. " +
-            "Los niños jugaban cerca del puente — riendo, corriendo y gritando de alegría. " +
-            "De repente, un fuerte trueno resonó por todo el valle: la tormenta se acercaba rápido. " +
-            "Todos corrieron a casa, esperando que la lluvia no durara demasiado."
+        private const val ES_TEXT = "El rápido zorro marrón salta sobre el perro perezoso en la plaza grande del pueblo durante una cálida tarde de verano. " +
+            "Mientras tanto, el gato curioso observa desde la ventana, preguntándose si debería salir a explorar el jardín. " +
+            "Los pájaros cantan con fuerza en los altos robles; el sol de la mañana es cálido y brillante, proyectando sombras doradas sobre el césped recién cortado. " +
+            "\"¡Qué día tan hermoso!\" dijo el viejo granjero, caminando despacio hacia el río con su bastón de madera. " +
+            "Llevaba una cesta llena de manzanas, naranjas y pan fresco de la panadería del pueblo. " +
+            "Los niños jugaban cerca del puente de piedra, riendo, corriendo y gritando de pura alegría mientras se perseguían por la pradera. " +
+            "De repente, un fuerte trueno resonó por todo el valle: la tormenta se acercaba rápido desde las montañas del oeste. " +
+            "Todos corrieron a casa, esperando que la lluvia no durara demasiado. " +
+            "Las nubes oscuras se juntaron rápidamente, bloqueando la luz del sol y convirtiendo el cielo en un profundo tono gris. " +
+            "La anciana de al lado cerró sus persianas de madera y recogió la ropa tendida antes de que cayeran las primeras gotas. " +
+            "Su jardín estaba lleno de rosas, tulipanes y girasoles que se mecían suavemente con el viento creciente. " +
+            "Había pasado toda la mañana regando las plantas y recortando los setos a lo largo del estrecho camino. " +
+            "Junto al puerto, los pescadores aseguraron sus barcos con gruesas cuerdas y pesadas anclas. " +
+            "Las olas se hacían cada vez más fuertes, golpeando contra el muelle de madera con creciente intensidad. " +
+            "El capitán Rodríguez gritaba instrucciones a su tripulación, asegurándose de que cada vela estuviera correctamente plegada y cada escotilla firmemente sellada. " +
+            "En la escuela local, la profesora reunió a los estudiantes dentro del aula y comenzó a leer una historia sobre valientes exploradores que viajaron a través del océano para descubrir nuevas tierras. " +
+            "Los niños escuchaban atentamente, con los ojos abiertos de emoción y asombro. " +
+            "Algunos dibujaban barcos y mapas del tesoro mientras otros escribían poemas cortos sobre el mar. " +
+            "El hospital en el lado oriental del pueblo permaneció ocupado durante toda la tarde. " +
+            "Los médicos y enfermeras trabajaban juntos para ayudar a los pacientes a recuperarse de diversas enfermedades. " +
+            "La farmacia de al lado proporcionaba medicinas y suministros a las familias que más los necesitaban durante la difícil temporada. " +
+            "Al atardecer, la tormenta había pasado y el cielo se despejó, revelando un magnífico arco iris que se extendía de un horizonte al otro. " +
+            "La gente salió a admirar los colores y respirar el aire fresco que olía a tierra mojada y pinos. " +
+            "La temperatura bajó ligeramente, trayendo una agradable frescura después de la húmeda tarde. " +
+            "El restaurante de la calle principal abrió sus puertas para el servicio de cena. " +
+            "El cocinero preparó un menú especial con salmón a la parrilla, verduras asadas, sopa de champiñones y pastel de chocolate de postre. " +
+            "Familias y amigos se reunieron alrededor de las mesas, compartiendo historias y risas mientras disfrutaban de la deliciosa comida y el ambiente acogedor. " +
+            "Cuando cayó la noche, las farolas se encendieron una a una, iluminando las tranquilas calles y los pacíficos vecindarios. " +
+            "La luna apareció detrás de las nubes restantes, proyectando un brillo plateado sobre el pueblo dormido. " +
+            "Mañana traería otro día lleno de posibilidades, aventuras y recuerdos esperando ser creados."
 
         private val EN_KEYWORDS = listOf(
-            "fox", "jumps", "lazy", "dog", "park",
-            "cat", "watches", "window", "outside",
-            "birds", "singing", "morning", "sun", "warm", "bright",
-            "beautiful", "day", "farmer", "walking", "river",
-            "basket", "apples", "oranges", "bread",
-            "children", "playing", "bridge", "laughing", "running",
-            "thunder", "valley", "storm", "approaching",
-            "hurried", "home", "rain"
+            // Paragraph 1: park scene
+            "fox", "jumps", "lazy", "dog", "park", "summer", "afternoon",
+            "cat", "watches", "window", "outside", "explore", "garden",
+            "birds", "singing", "oak", "morning", "sun", "warm", "bright", "golden", "shadows", "lawn",
+            // Paragraph 2: farmer
+            "beautiful", "day", "farmer", "walking", "river", "wooden", "cane",
+            "basket", "apples", "oranges", "bread", "village", "bakery",
+            "children", "playing", "stone", "bridge", "laughing", "running", "meadow",
+            // Paragraph 3: storm
+            "thunder", "valley", "storm", "approaching", "western", "mountains",
+            "hurried", "home", "rain",
+            "dark", "clouds", "sunlight", "sky", "grey",
+            // Paragraph 4: old woman
+            "woman", "shutters", "laundry", "drops",
+            "roses", "tulips", "sunflowers", "wind",
+            "watering", "plants", "hedges", "narrow", "path",
+            // Paragraph 5: harbor
+            "harbor", "fishermen", "boats", "ropes", "anchors",
+            "waves", "stronger", "crashing", "dock", "force",
+            "captain", "instructions", "crew", "sail", "hatch", "sealed",
+            // Paragraph 6: school
+            "school", "teacher", "students", "classroom", "reading", "story",
+            "explorers", "traveled", "ocean", "discover", "lands",
+            "listened", "eyes", "excitement", "wonder",
+            "ships", "treasure", "maps", "poems", "sea",
+            // Paragraph 7: hospital
+            "hospital", "eastern", "town", "busy", "afternoon",
+            "doctors", "nurses", "patients", "recover", "illnesses",
+            "pharmacy", "medicine", "supplies", "families", "season",
+            // Paragraph 8: rainbow
+            "evening", "passed", "cleared", "rainbow", "horizon",
+            "people", "admire", "colors", "fresh", "air", "earth", "pine",
+            "temperature", "dropped", "coolness", "humid",
+            // Paragraph 9: restaurant
+            "restaurant", "street", "doors", "dinner",
+            "chef", "menu", "salmon", "vegetables", "mushroom", "soup", "chocolate", "cake", "dessert",
+            "friends", "tables", "stories", "laughter", "food", "atmosphere",
+            // Paragraph 10: night
+            "night", "streetlights", "flickered", "quiet", "roads", "peaceful", "neighborhoods",
+            "moon", "clouds", "silver", "glow", "sleeping",
+            "tomorrow", "possibilities", "adventures", "memories"
         )
         private val ES_KEYWORDS = listOf(
-            "marrón", "salta", "perro", "perezoso", "plaza",
-            "curioso", "ventana", "mientras",
-            "cantan", "fuerza", "sol", "mañana", "cálido", "brillante",
-            "hermoso", "viejo", "caminando", "despacio", "río",
-            "cesta", "manzanas", "naranjas", "pan", "fresco",
-            "niños", "jugaban", "puente", "riendo", "corriendo",
-            "valle", "tormenta", "acercaba",
-            "corrieron", "casa", "lluvia", "demasiado"
+            // Párrafo 1: escena del parque
+            "marrón", "salta", "perro", "perezoso", "plaza", "pueblo", "verano",
+            "curioso", "ventana", "mientras", "explorar", "jardín",
+            "cantan", "fuerza", "robles", "sol", "mañana", "cálido", "brillante", "sombras", "doradas", "césped",
+            // Párrafo 2: granjero
+            "hermoso", "viejo", "granjero", "caminando", "despacio", "río", "bastón", "madera",
+            "cesta", "manzanas", "naranjas", "pan", "fresco", "panadería",
+            "niños", "jugaban", "puente", "piedra", "riendo", "corriendo", "pradera",
+            // Párrafo 3: tormenta
+            "trueno", "valle", "tormenta", "acercaba", "montañas", "oeste",
+            "corrieron", "casa", "lluvia", "demasiado",
+            "nubes", "oscuras", "cielo", "gris",
+            // Párrafo 4: anciana
+            "anciana", "persianas", "ropa", "gotas",
+            "rosas", "tulipanes", "girasoles", "viento",
+            "regando", "plantas", "setos", "estrecho", "camino",
+            // Párrafo 5: puerto
+            "puerto", "pescadores", "barcos", "cuerdas", "anclas",
+            "olas", "fuertes", "golpeando", "muelle", "intensidad",
+            "capitán", "instrucciones", "tripulación", "vela", "escotilla", "sellada",
+            // Párrafo 6: escuela
+            "escuela", "profesora", "estudiantes", "aula", "leer", "historia",
+            "exploradores", "viajaron", "océano", "descubrir", "tierras",
+            "escuchaban", "ojos", "emoción", "asombro",
+            "barcos", "tesoro", "mapas", "poemas", "mar",
+            // Párrafo 7: hospital
+            "hospital", "oriental", "pueblo", "ocupado", "tarde",
+            "médicos", "enfermeras", "pacientes", "recuperarse", "enfermedades",
+            "farmacia", "medicinas", "suministros", "familias", "temporada",
+            // Párrafo 8: arco iris
+            "atardecer", "pasado", "despejó", "arco", "horizonte",
+            "gente", "admirar", "colores", "aire", "tierra", "mojada", "pinos",
+            "temperatura", "frescura", "húmeda",
+            // Párrafo 9: restaurante
+            "restaurante", "calle", "principal", "puertas", "cena",
+            "cocinero", "menú", "salmón", "verduras", "asadas", "sopa", "chocolate", "pastel", "postre",
+            "amigos", "mesas", "historias", "risas", "comida", "acogedor",
+            // Párrafo 10: noche
+            "noche", "farolas", "encendieron", "tranquilas", "calles", "vecindarios",
+            "luna", "nubes", "brillo", "plateado", "dormido",
+            "posibilidades", "aventuras", "recuerdos"
         )
     }
 
