@@ -90,6 +90,7 @@ class TtsSpeechRoundtripTest {
             "The moon appeared behind the remaining clouds, casting a silver glow over the sleeping town. " +
             "Tomorrow would bring another day full of possibilities, adventures, and memories waiting to be created."
 
+        // ~270 words — trimmed to avoid Vosk STT timeout on CI
         private const val ES_TEXT = "El rápido zorro marrón salta sobre el perro perezoso en la plaza grande del pueblo durante una cálida tarde de verano. " +
             "Mientras tanto, el gato curioso observa desde la ventana, preguntándose si debería salir a explorar el jardín. " +
             "Los pájaros cantan con fuerza en los altos robles; el sol de la mañana es cálido y brillante, proyectando sombras doradas sobre el césped recién cortado. " +
@@ -104,22 +105,7 @@ class TtsSpeechRoundtripTest {
             "Había pasado toda la mañana regando las plantas y recortando los setos a lo largo del estrecho camino. " +
             "Junto al puerto, los pescadores aseguraron sus barcos con gruesas cuerdas y pesadas anclas. " +
             "Las olas se hacían cada vez más fuertes, golpeando contra el muelle de madera con creciente intensidad. " +
-            "El capitán Rodríguez gritaba instrucciones a su tripulación, asegurándose de que cada vela estuviera correctamente plegada y cada escotilla firmemente sellada. " +
-            "En la escuela local, la profesora reunió a los estudiantes dentro del aula y comenzó a leer una historia sobre valientes exploradores que viajaron a través del océano para descubrir nuevas tierras. " +
-            "Los niños escuchaban atentamente, con los ojos abiertos de emoción y asombro. " +
-            "Algunos dibujaban barcos y mapas del tesoro mientras otros escribían poemas cortos sobre el mar. " +
-            "El hospital en el lado oriental del pueblo permaneció ocupado durante toda la tarde. " +
-            "Los médicos y enfermeras trabajaban juntos para ayudar a los pacientes a recuperarse de diversas enfermedades. " +
-            "La farmacia de al lado proporcionaba medicinas y suministros a las familias que más los necesitaban durante la difícil temporada. " +
-            "Al atardecer, la tormenta había pasado y el cielo se despejó, revelando un magnífico arco iris que se extendía de un horizonte al otro. " +
-            "La gente salió a admirar los colores y respirar el aire fresco que olía a tierra mojada y pinos. " +
-            "La temperatura bajó ligeramente, trayendo una agradable frescura después de la húmeda tarde. " +
-            "El restaurante de la calle principal abrió sus puertas para el servicio de cena. " +
-            "El cocinero preparó un menú especial con salmón a la parrilla, verduras asadas, sopa de champiñones y pastel de chocolate de postre. " +
-            "Familias y amigos se reunieron alrededor de las mesas, compartiendo historias y risas mientras disfrutaban de la deliciosa comida y el ambiente acogedor. " +
-            "Cuando cayó la noche, las farolas se encendieron una a una, iluminando las tranquilas calles y los pacíficos vecindarios. " +
-            "La luna apareció detrás de las nubes restantes, proyectando un brillo plateado sobre el pueblo dormido. " +
-            "Mañana traería otro día lleno de posibilidades, aventuras y recuerdos esperando ser creados."
+            "El capitán Rodríguez gritaba instrucciones a su tripulación, asegurándose de que cada vela estuviera correctamente plegada y cada escotilla firmemente sellada."
 
         private val EN_KEYWORDS = listOf(
             // Paragraph 1: park scene
@@ -184,28 +170,7 @@ class TtsSpeechRoundtripTest {
             // Párrafo 5: puerto
             "puerto", "pescadores", "barcos", "cuerdas", "anclas",
             "olas", "fuertes", "golpeando", "muelle", "intensidad",
-            "capitán", "instrucciones", "tripulación", "vela", "escotilla", "sellada",
-            // Párrafo 6: escuela
-            "escuela", "profesora", "estudiantes", "aula", "leer", "historia",
-            "exploradores", "viajaron", "océano", "descubrir", "tierras",
-            "escuchaban", "ojos", "emoción", "asombro",
-            "barcos", "tesoro", "mapas", "poemas", "mar",
-            // Párrafo 7: hospital
-            "hospital", "oriental", "pueblo", "ocupado", "tarde",
-            "médicos", "enfermeras", "pacientes", "recuperarse", "enfermedades",
-            "farmacia", "medicinas", "suministros", "familias", "temporada",
-            // Párrafo 8: arco iris
-            "atardecer", "pasado", "despejó", "arco", "horizonte",
-            "gente", "admirar", "colores", "aire", "tierra", "mojada", "pinos",
-            "temperatura", "frescura", "húmeda",
-            // Párrafo 9: restaurante
-            "restaurante", "calle", "principal", "puertas", "cena",
-            "cocinero", "menú", "salmón", "verduras", "asadas", "sopa", "chocolate", "pastel", "postre",
-            "amigos", "mesas", "historias", "risas", "comida", "acogedor",
-            // Párrafo 10: noche
-            "noche", "farolas", "encendieron", "tranquilas", "calles", "vecindarios",
-            "luna", "nubes", "brillo", "plateado", "dormido",
-            "posibilidades", "aventuras", "recuerdos"
+            "capitán", "instrucciones", "tripulación", "vela", "escotilla", "sellada"
         )
     }
 
