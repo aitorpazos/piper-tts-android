@@ -241,9 +241,20 @@
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
-                        android:layout_marginEnd="8dp"
+                        android:layout_marginEnd="4dp"
                         android:text="@string/btn_speak"
                         app:icon="@android:drawable/ic_media_play" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnRecord"
+                        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:layout_marginStart="4dp"
+                        android:layout_marginEnd="4dp"
+                        android:text="@string/btn_record"
+                        app:icon="@android:drawable/ic_btn_speak_now" />
 
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/btnStop"
@@ -251,7 +262,7 @@
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
-                        android:layout_marginStart="8dp"
+                        android:layout_marginStart="4dp"
                         android:text="@string/btn_stop"
                         app:icon="@android:drawable/ic_media_pause" />
 
