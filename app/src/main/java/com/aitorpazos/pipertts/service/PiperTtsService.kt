@@ -227,8 +227,10 @@ class PiperTtsService : TextToSpeechService() {
         // If voice not found, it may be a placeholder name (e.g. "en-us-default").
         // Return SUCCESS anyway so Android doesn't mark the engine as broken.
         // Actual synthesis will handle the missing engine gracefully.
+        // NOTE: Do NOT set currentVoiceName here — if we didn't actually load
+        // the voice, keeping the old name ensures the next request with this
+        // voice name will retry loading instead of being skipped.
         Log.i(TAG, "Voice '$voiceName' not found on disk, returning SUCCESS for engine visibility")
-        currentVoiceName = voiceName
         return TextToSpeech.SUCCESS
     }
 
@@ -359,22 +361,27 @@ class PiperTtsService : TextToSpeechService() {
 
         Log.d(TAG, "Synthesizing: '${text.take(100)}'")
 
-        // Check if we need to load a different language
+        // Check if a specific voice was requested (most reliable signal)
+        val requestedVoiceName = request.voiceName
+        if (requestedVoiceName != null && requestedVoiceName != currentVoiceName) {
+            onLoadVoice(requestedVoiceName)
+        }
+
+        // Check if we need to load a different language/country
+        // Compare both language AND country — e.g. switching from en-US to en-GB
+        // must trigger a voice reload even though both are "en".
         val requestLang = request.language
         val requestCountry = request.country
         if (requestLang != null) {
             val normLang = normaliseLanguage(requestLang)
             val normCountry = normaliseCountry(requestCountry ?: "")
             val requestLocale = Locale(normLang, normCountry)
-            if (requestLocale.language != currentLocale.language) {
+            val languageChanged = requestLocale.language != currentLocale.language
+            val countryChanged = normCountry.isNotEmpty() &&
+                !normCountry.equals(currentLocale.country, ignoreCase = true)
+            if (languageChanged || countryChanged) {
                 loadVoiceForLocale(requestLocale)
             }
-        }
-
-        // Check if a specific voice was requested
-        val requestedVoiceName = request.voiceName
-        if (requestedVoiceName != null && requestedVoiceName != currentVoiceName) {
-            onLoadVoice(requestedVoiceName)
         }
 
         val currentEngine = engine

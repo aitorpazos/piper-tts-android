@@ -181,7 +181,7 @@ class VoiceManager(private val context: Context) {
         val voices = listVoices()
 
         // Find best match: exact locale > language match > default (English)
-        val voice = voices.find { it.locale.language == locale.language && it.locale.country == locale.country }
+        val voice = voices.find { it.locale.language == locale.language && it.locale.country.equals(locale.country, ignoreCase = true) }
             ?: voices.find { it.locale.language == locale.language }
             ?: voices.find { it.locale.language == "en" }
             ?: voices.firstOrNull()
