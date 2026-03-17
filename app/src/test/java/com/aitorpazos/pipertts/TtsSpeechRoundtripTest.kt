@@ -18,6 +18,7 @@ import com.aitorpazos.pipertts.model.PiperVoiceConfig
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.*
+import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Test
 import org.vosk.Model
@@ -30,6 +31,7 @@ import java.nio.ByteOrder
 import java.nio.FloatBuffer
 import java.nio.LongBuffer
 import java.util.zip.ZipInputStream
+import javax.net.ssl.SSLException
 
 /**
  * Pure JVM roundtrip test: TTS synthesis with Piper (ONNX Runtime) -> STT with Vosk.
@@ -441,9 +443,14 @@ class TtsSpeechRoundtripTest {
             return cached.readBytes()
         }
         println("Downloading $url ...")
-        val bytes = URI(url).toURL().openStream().use { it.readBytes() }
-        cached.writeBytes(bytes)
-        return bytes
+        try {
+            val bytes = URI(url).toURL().openStream().use { it.readBytes() }
+            cached.writeBytes(bytes)
+            return bytes
+        } catch (e: SSLException) {
+            assumeTrue("Skipping test: SSL error downloading $url — ${e.message}", false)
+            throw e // unreachable, assumeTrue(false) throws AssumptionViolatedException
+        }
     }
 
     private fun downloadAndExtractVoskModel(url: String, cacheDirName: String): File {
@@ -459,8 +466,13 @@ class TtsSpeechRoundtripTest {
         val zipFile = File(cacheDir, "$cacheDirName.zip")
         if (!zipFile.exists() || zipFile.length() < 1000) {
             println("Downloading $url ...")
-            URI(url).toURL().openStream().use { input ->
-                zipFile.outputStream().use { output -> input.copyTo(output) }
+            try {
+                URI(url).toURL().openStream().use { input ->
+                    zipFile.outputStream().use { output -> input.copyTo(output) }
+                }
+            } catch (e: SSLException) {
+                assumeTrue("Skipping test: SSL error downloading $url — ${e.message}", false)
+                throw e // unreachable
             }
         }
 
