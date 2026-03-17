@@ -49,6 +49,14 @@ class PiperTtsService : TextToSpeechService() {
     companion object {
         private const val TAG = "PiperTtsService"
 
+        // Custom params keys for direct language override.
+        // Apps can pass these in the speak() params Bundle to bypass the
+        // Android TTS framework's unreliable voice/language state management.
+        // This provides a guaranteed-reliable way to specify the desired language.
+        const val EXTRA_PIPER_LANGUAGE = "piper_language"    // 2-letter ISO 639-1 (e.g. "en")
+        const val EXTRA_PIPER_COUNTRY  = "piper_country"     // 2-letter ISO 3166-1 (e.g. "GB")
+        const val EXTRA_PIPER_VOICE    = "piper_voice_name"  // exact voice name (e.g. "en_GB-alba-medium")
+
         /**
          * Map ISO 639-2/T (3-letter) codes that Android may pass to ISO 639-1 (2-letter).
          * Android's TTS framework sometimes sends 3-letter codes (e.g., "eng", "spa").
@@ -437,9 +445,39 @@ class PiperTtsService : TextToSpeechService() {
             return
         }
 
+        // --- Try to read custom direct-override params from the Bundle ---
+        // SynthesisRequest.getParams() is @hide in the SDK but exists at runtime.
+        // If accessible, it lets apps pass the desired language directly, bypassing
+        // the Android framework's unreliable voice/language state management.
+        var piperLang: String? = null
+        var piperCountry: String? = null
+        var piperVoice: String? = null
+        try {
+            val paramsBundle = request.javaClass.getMethod("getParams").invoke(request) as? android.os.Bundle
+            if (paramsBundle != null) {
+                piperLang = paramsBundle.getString(EXTRA_PIPER_LANGUAGE)
+                piperCountry = paramsBundle.getString(EXTRA_PIPER_COUNTRY) ?: ""
+                piperVoice = paramsBundle.getString(EXTRA_PIPER_VOICE)
+            }
+        } catch (_: Exception) {
+            // getParams() not available on this Android version — fall through
+        }
+
         Log.d(TAG, "Synthesizing: '${text.take(100)}' " +
             "voiceName=${request.voiceName} lang=${request.language} country=${request.country} " +
+            "piperLang=$piperLang piperCountry=$piperCountry piperVoice=$piperVoice " +
             "loadedVoice=$loadedVoiceName loadedLocale=$loadedLocale")
+
+        // If direct override params are present, use them exclusively.
+        // This is the most reliable path — completely bypasses framework state.
+        if (piperLang != null || piperVoice != null) {
+            val resolved = resolveVoiceFromDirectParams(piperLang, piperCountry ?: "", piperVoice)
+            if (resolved) {
+                synthesizeWithCurrentEngine(text, request, callback)
+                return
+            }
+            Log.w(TAG, "Direct params resolution failed, falling back to standard path")
+        }
 
         var needsReload = engine == null
 
@@ -532,41 +570,86 @@ class PiperTtsService : TextToSpeechService() {
             }
         }
 
+        synthesizeWithCurrentEngine(text, request, callback)
+    }
+
+    /**
+     * Resolve the voice to load from direct params (piper_language, piper_country, piper_voice_name).
+     * Returns true if a voice was successfully loaded, false otherwise.
+     */
+    private fun resolveVoiceFromDirectParams(lang: String?, country: String?, voiceName: String?): Boolean {
+        // Try exact voice name first
+        if (voiceName != null && voiceName.isNotEmpty()) {
+            if (voiceName == loadedVoiceName && engine != null) {
+                Log.d(TAG, "Direct params: voice '$voiceName' already loaded")
+                return true
+            }
+            val voiceData = voiceManager.loadVoiceByName(voiceName)
+            if (voiceData != null) {
+                engine?.close()
+                engine = PiperEngine(voiceData.config, voiceData.modelBytes)
+                currentLocale = voiceData.locale
+                currentVoiceName = voiceName
+                loadedLocale = voiceData.locale
+                loadedVoiceName = voiceName
+                Log.i(TAG, "Direct params: loaded voice by name '$voiceName'")
+                return true
+            }
+            Log.w(TAG, "Direct params: voice '$voiceName' not found on disk")
+        }
+
+        // Try by language/country
+        if (lang != null && lang.isNotEmpty()) {
+            val normLang = normaliseLanguage(lang)
+            val normCountry = normaliseCountry(country ?: "")
+
+            // Check if already loaded
+            val loaded = loadedLocale
+            if (loaded != null && engine != null &&
+                normLang == loaded.language &&
+                (normCountry.isEmpty() || normCountry.equals(loaded.country, ignoreCase = true))) {
+                Log.d(TAG, "Direct params: locale $normLang/$normCountry already loaded")
+                return true
+            }
+
+            val locale = Locale(normLang, normCountry)
+            val result = loadVoiceForLocale(locale)
+            if (result != TextToSpeech.LANG_NOT_SUPPORTED) {
+                Log.i(TAG, "Direct params: loaded voice for locale $normLang/$normCountry")
+                return true
+            }
+            Log.w(TAG, "Direct params: no voice found for locale $normLang/$normCountry")
+        }
+
+        return false
+    }
+
+    /**
+     * Perform synthesis with the currently loaded engine.
+     * Shared between the direct-params path and the standard path.
+     */
+    private fun synthesizeWithCurrentEngine(text: String, request: SynthesisRequest, callback: SynthesisCallback) {
         try {
             val activeEngine = engine ?: run {
-                Log.w(TAG, "Engine still null after load attempt, returning silence")
+                Log.w(TAG, "Engine null in synthesizeWithCurrentEngine, returning silence")
                 callback.start(22050, AudioFormat.ENCODING_PCM_16BIT, 1)
                 callback.done()
                 return
             }
 
-            // Get speech rate from request (default 100 = 1.0x)
             val speechRate = request.speechRate / 100.0f
             val lengthScale = 1.0f / speechRate.coerceIn(0.25f, 4.0f)
 
-            // Synthesize
-            val samples = activeEngine.synthesize(
-                text = text,
-                lengthScale = lengthScale
-            )
-
+            val samples = activeEngine.synthesize(text = text, lengthScale = lengthScale)
             if (samples.isEmpty()) {
                 callback.done()
                 return
             }
 
-            // Convert to 16-bit PCM
             val pcmData = activeEngine.floatToInt16Pcm(samples)
-
-            // Start audio output
             val sampleRate = activeEngine.sampleRate
-            callback.start(
-                sampleRate,
-                AudioFormat.ENCODING_PCM_16BIT,
-                1 // mono
-            )
+            callback.start(sampleRate, AudioFormat.ENCODING_PCM_16BIT, 1)
 
-            // Write audio in chunks to allow for interruption
             val chunkSize = 4096
             var offset = 0
             while (offset < pcmData.size) {
@@ -582,12 +665,8 @@ class PiperTtsService : TextToSpeechService() {
 
             callback.done()
             Log.d(TAG, "Synthesis complete: ${pcmData.size} bytes")
-
         } catch (e: Exception) {
             Log.e(TAG, "Synthesis failed", e)
-            // CRITICAL: Never call callback.error() — it causes Android to mark
-            // the engine as broken and hide it from TTS settings permanently.
-            // Return silence instead so the engine stays functional.
             try {
                 callback.start(22050, AudioFormat.ENCODING_PCM_16BIT, 1)
                 callback.done()
