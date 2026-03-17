@@ -125,6 +125,14 @@ class MainActivity : AppCompatActivity() {
         // Load info
         refreshInstalledVoices()
         checkTtsEngineStatus()
+
+        // Show version
+        try {
+            val pInfo = packageManager.getPackageInfo(packageName, 0)
+            binding.tvVersionInfo.text = "Piper TTS v${pInfo.versionName} (${pInfo.longVersionCode})"
+        } catch (_: Exception) {
+            binding.tvVersionInfo.text = ""
+        }
     }
 
     override fun onResume() {
