@@ -6,11 +6,18 @@
     <string name="default_text">Hello! This is Piper text to speech running on your Android device.</string>
     <string name="btn_speak">Speak</string>
     <string name="btn_stop">Stop</string>
+    <string name="btn_record">Record</string>
     <string name="status_ready">Ready. Enter text and tap Speak.</string>
     <string name="status_synthesizing">Synthesizing…</string>
+    <string name="status_recording">Recording TTS output…</string>
+    <string name="status_recorded">Saved: %1$s</string>
     <string name="status_no_audio">No audio generated</string>
     <string name="status_playing">Playing (%1$d samples)</string>
     <string name="status_error">Error: %1$s</string>
+    <string name="share_recording_title">Share TTS recording</string>
+    <string name="share_recording_subject">Piper TTS Recording</string>
+    <string name="share_recording_body">Piper TTS recording\nVoice: %1$s\nText: %2$s</string>
+    <string name="share_error">Could not share file: %1$s</string>
     <string name="tts_settings_title">Piper TTS Settings</string>
     <string name="tts_settings_description">Manage voice models for the Piper TTS engine.</string>
 

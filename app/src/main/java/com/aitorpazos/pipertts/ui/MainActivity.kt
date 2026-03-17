@@ -27,6 +27,7 @@ import android.provider.Settings
 import android.widget.ArrayAdapter
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.FileProvider
 import androidx.lifecycle.lifecycleScope
 import com.aitorpazos.pipertts.R
 import com.aitorpazos.pipertts.databinding.ActivityMainBinding
@@ -36,6 +37,11 @@ import com.aitorpazos.pipertts.util.VoicePreferences
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
+import java.io.FileOutputStream
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 class MainActivity : AppCompatActivity() {
 
@@ -102,6 +108,16 @@ class MainActivity : AppCompatActivity() {
             stopPlayback()
         }
 
+        // === Record TTS output (for issue reporting) ===
+        binding.btnRecord.setOnClickListener {
+            val text = binding.etInput.text?.toString() ?: ""
+            if (text.isNotBlank()) {
+                synthesizeAndRecord(text)
+            } else {
+                Toast.makeText(this, "Enter some text first", Toast.LENGTH_SHORT).show()
+            }
+        }
+
         // Load info
         refreshInstalledVoices()
         checkTtsEngineStatus()
@@ -123,12 +139,14 @@ class MainActivity : AppCompatActivity() {
             if (voices.isEmpty()) {
                 binding.tvInstalledVoices.text = getString(R.string.no_voices_installed)
                 binding.btnSpeak.isEnabled = false
+                binding.btnRecord.isEnabled = false
                 binding.tvStatus.text = "Download a voice first to test TTS"
                 // Hide active voice selector when no voices
                 binding.tilActiveVoice.isEnabled = false
                 binding.actvActiveVoice.setText("", false)
             } else {
                 binding.btnSpeak.isEnabled = true
+                binding.btnRecord.isEnabled = true
                 binding.tvStatus.text = getString(R.string.status_ready)
                 val voiceLines = voices.joinToString("\n") { voice ->
                     "• ${voice.locale.displayLanguage} (${voice.locale.displayCountry}) — ${voice.name}"
@@ -191,6 +209,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun synthesizeAndPlay(text: String) {
         binding.btnSpeak.isEnabled = false
+        binding.btnRecord.isEnabled = false
         binding.tvStatus.text = getString(R.string.status_synthesizing)
 
         lifecycleScope.launch {
@@ -220,7 +239,129 @@ class MainActivity : AppCompatActivity() {
                 binding.tvStatus.text = getString(R.string.status_error, e.message ?: "Unknown")
             } finally {
                 binding.btnSpeak.isEnabled = true
+                binding.btnRecord.isEnabled = true
             }
+        }
+    }
+
+    /**
+     * Synthesize text and save the output as a WAV file, then open the share sheet.
+     * Useful for attaching TTS output to issue reports.
+     */
+    private fun synthesizeAndRecord(text: String) {
+        binding.btnSpeak.isEnabled = false
+        binding.btnRecord.isEnabled = false
+        binding.tvStatus.text = getString(R.string.status_recording)
+
+        lifecycleScope.launch {
+            try {
+                val wavFile = withContext(Dispatchers.IO) {
+                    // Ensure engine is loaded with the active voice
+                    if (engine == null) {
+                        val voiceData = voiceManager.loadActiveVoice(voicePreferences)
+                            ?: throw Exception("No voice model available. Tap 'Manage' to download one.")
+                        engine = PiperEngine(voiceData.config, voiceData.modelBytes)
+                    }
+
+                    val activeEngine = engine!!
+                    val samples = activeEngine.synthesize(text)
+                    val pcmData = activeEngine.floatToInt16Pcm(samples)
+
+                    if (pcmData.isEmpty()) {
+                        throw Exception("No audio generated")
+                    }
+
+                    // Save as WAV to cache dir
+                    val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
+                    val voiceName = voicePreferences.activeVoiceKey?.replace(Regex("[^a-zA-Z0-9_-]"), "_") ?: "unknown"
+                    val file = File(cacheDir, "piper_tts_${voiceName}_$timestamp.wav")
+                    writeWavFile(file, pcmData, activeEngine.sampleRate)
+                    file
+                }
+
+                binding.tvStatus.text = getString(R.string.status_recorded, wavFile.name)
+
+                // Open share sheet
+                shareWavFile(wavFile)
+
+            } catch (e: Exception) {
+                binding.tvStatus.text = getString(R.string.status_error, e.message ?: "Unknown")
+            } finally {
+                binding.btnSpeak.isEnabled = true
+                binding.btnRecord.isEnabled = true
+            }
+        }
+    }
+
+    /**
+     * Write PCM data as a standard WAV file (16-bit mono).
+     */
+    private fun writeWavFile(file: File, pcmData: ByteArray, sampleRate: Int) {
+        val channels = 1
+        val bitsPerSample = 16
+        val byteRate = sampleRate * channels * bitsPerSample / 8
+        val blockAlign = channels * bitsPerSample / 8
+        val dataSize = pcmData.size
+        val totalSize = 36 + dataSize
+
+        FileOutputStream(file).use { fos ->
+            // RIFF header
+            fos.write("RIFF".toByteArray())
+            fos.write(intToLittleEndianBytes(totalSize))
+            fos.write("WAVE".toByteArray())
+
+            // fmt sub-chunk
+            fos.write("fmt ".toByteArray())
+            fos.write(intToLittleEndianBytes(16)) // sub-chunk size
+            fos.write(shortToLittleEndianBytes(1)) // PCM format
+            fos.write(shortToLittleEndianBytes(channels))
+            fos.write(intToLittleEndianBytes(sampleRate))
+            fos.write(intToLittleEndianBytes(byteRate))
+            fos.write(shortToLittleEndianBytes(blockAlign))
+            fos.write(shortToLittleEndianBytes(bitsPerSample))
+
+            // data sub-chunk
+            fos.write("data".toByteArray())
+            fos.write(intToLittleEndianBytes(dataSize))
+            fos.write(pcmData)
+        }
+    }
+
+    private fun intToLittleEndianBytes(value: Int): ByteArray =
+        byteArrayOf(
+            (value and 0xFF).toByte(),
+            (value shr 8 and 0xFF).toByte(),
+            (value shr 16 and 0xFF).toByte(),
+            (value shr 24 and 0xFF).toByte()
+        )
+
+    private fun shortToLittleEndianBytes(value: Int): ByteArray =
+        byteArrayOf(
+            (value and 0xFF).toByte(),
+            (value shr 8 and 0xFF).toByte()
+        )
+
+    private fun shareWavFile(file: File) {
+        try {
+            val uri = FileProvider.getUriForFile(
+                this,
+                "${packageName}.fileprovider",
+                file
+            )
+            val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                type = "audio/wav"
+                putExtra(Intent.EXTRA_STREAM, uri)
+                putExtra(Intent.EXTRA_SUBJECT, getString(R.string.share_recording_subject))
+                putExtra(Intent.EXTRA_TEXT, getString(
+                    R.string.share_recording_body,
+                    voicePreferences.activeVoiceKey ?: "unknown",
+                    binding.etInput.text?.toString() ?: ""
+                ))
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            startActivity(Intent.createChooser(shareIntent, getString(R.string.share_recording_title)))
+        } catch (e: Exception) {
+            Toast.makeText(this, getString(R.string.share_error, e.message ?: "Unknown"), Toast.LENGTH_LONG).show()
         }
     }
 
