@@ -40,6 +40,35 @@ class VoiceManager(private val context: Context) {
         private const val TAG = "VoiceManager"
         private const val VOICES_ASSET_DIR = "voices"
         private const val VOICES_EXTERNAL_DIR = "voices"
+
+        /**
+         * Map ISO 3166-1 alpha-3 (3-letter) country codes to alpha-2 (2-letter).
+         * Android TTS framework sometimes sends 3-letter codes (e.g. "GBR", "ESP").
+         */
+        private val ISO3_COUNTRY_TO_ISO2: Map<String, String> by lazy {
+            val map = mutableMapOf<String, String>()
+            for (loc in Locale.getAvailableLocales()) {
+                try {
+                    val iso3 = loc.isO3Country
+                    val iso2 = loc.country
+                    if (iso3.isNotEmpty() && iso2.isNotEmpty() && iso3.length == 3 && iso2.length == 2) {
+                        map[iso3.uppercase()] = iso2.uppercase()
+                    }
+                } catch (_: Exception) {}
+            }
+            map
+        }
+
+        /**
+         * Normalise a country code to 2-letter ISO 3166-1 alpha-2.
+         */
+        fun normaliseCountryCode(country: String): String {
+            val upper = country.uppercase().trim()
+            if (upper.isEmpty()) return upper
+            if (upper.length == 2) return upper
+            if (upper.length == 3) return ISO3_COUNTRY_TO_ISO2[upper] ?: upper
+            return upper
+        }
     }
 
     data class VoiceData(
@@ -180,8 +209,17 @@ class VoiceManager(private val context: Context) {
     fun loadVoice(locale: Locale): VoiceData? {
         val voices = listVoices()
 
+        // Normalise the requested country to 2-letter ISO 3166-1 alpha-2.
+        // The Android TTS framework may pass 3-letter codes (e.g. "GBR", "ESP")
+        // but Piper voice locales use 2-letter codes (e.g. "GB", "ES").
+        val requestCountry = normaliseCountryCode(locale.country)
+
         // Find best match: exact locale > language match > default (English)
-        val voice = voices.find { it.locale.language == locale.language && it.locale.country.equals(locale.country, ignoreCase = true) }
+        val voice = voices.find {
+            it.locale.language == locale.language &&
+            requestCountry.isNotEmpty() &&
+            it.locale.country.equals(requestCountry, ignoreCase = true)
+        }
             ?: voices.find { it.locale.language == locale.language }
             ?: voices.find { it.locale.language == "en" }
             ?: voices.firstOrNull()

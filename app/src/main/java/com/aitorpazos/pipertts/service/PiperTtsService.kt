@@ -91,9 +91,40 @@ class PiperTtsService : TextToSpeechService() {
             return lower
         }
 
+        /**
+         * Map ISO 3166-1 alpha-3 (3-letter) country codes to alpha-2 (2-letter).
+         * Android's TTS framework sends 3-letter codes (e.g., "GBR", "ESP", "USA")
+         * but Piper voice locales use 2-letter codes (e.g., "GB", "ES", "US").
+         */
+        private val ISO3_COUNTRY_TO_ISO2 = buildIso3CountryMap()
+
+        private fun buildIso3CountryMap(): Map<String, String> {
+            val map = mutableMapOf<String, String>()
+            for (loc in Locale.getAvailableLocales()) {
+                try {
+                    val iso3 = loc.isO3Country
+                    val iso2 = loc.country
+                    if (iso3.isNotEmpty() && iso2.isNotEmpty() && iso3.length == 3 && iso2.length == 2) {
+                        map[iso3.uppercase()] = iso2.uppercase()
+                    }
+                } catch (_: Exception) {
+                    // Some locales throw MissingResourceException
+                }
+            }
+            return map
+        }
+
+        /**
+         * Normalise a country code to 2-letter ISO 3166-1 alpha-2.
+         * Accepts "US", "USA", "GBR", "gb", etc.
+         */
         fun normaliseCountry(country: String): String {
-            val upper = country.uppercase()
-            if (upper.length <= 3) return upper
+            val upper = country.uppercase().trim()
+            if (upper.isEmpty()) return upper
+            // Already 2-letter
+            if (upper.length == 2) return upper
+            // 3-letter → convert to 2-letter
+            if (upper.length == 3) return ISO3_COUNTRY_TO_ISO2[upper] ?: upper
             return upper
         }
     }
@@ -300,10 +331,44 @@ class PiperTtsService : TextToSpeechService() {
     /**
      * Return a default voice name for a given locale.
      *
-     * NOTE: TextToSpeechService does NOT have an overridable onGetDefaultVoiceNameForLocale.
-     * The default voice selection is done through onGetVoices() — Android picks the first
-     * matching voice. This helper method is used internally only.
+     * The Android TTS framework calls this during client initialization to pick
+     * a default voice. The base class implementation iterates onGetVoices() and
+     * matches on 3-letter ISO codes. We override to use our normalisation logic
+     * so the correct voice is returned regardless of 2-letter vs 3-letter codes.
      */
+    override fun onGetDefaultVoiceNameFor(lang: String, country: String, variant: String): String {
+        val normLang = normaliseLanguage(lang)
+        val normCountry = normaliseCountry(country)
+
+        try {
+            val voices = voiceManager.listVoices()
+            // Exact match (language + country)
+            val exact = voices.find {
+                it.locale.language == normLang &&
+                normCountry.isNotEmpty() &&
+                it.locale.country.equals(normCountry, ignoreCase = true)
+            }
+            if (exact != null) {
+                Log.d(TAG, "onGetDefaultVoiceNameFor($lang/$country/$variant) → ${exact.name}")
+                return exact.name
+            }
+
+            // Language-only match
+            val langMatch = voices.find { it.locale.language == normLang }
+            if (langMatch != null) {
+                Log.d(TAG, "onGetDefaultVoiceNameFor($lang/$country/$variant) → ${langMatch.name} (lang-only)")
+                return langMatch.name
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Error in onGetDefaultVoiceNameFor", e)
+        }
+
+        // Fallback to a synthetic name — the engine will handle it gracefully
+        val fallback = if (normCountry.isNotEmpty()) "$normLang-${normCountry.lowercase()}-default" else "$normLang-default"
+        Log.d(TAG, "onGetDefaultVoiceNameFor($lang/$country/$variant) → $fallback (fallback)")
+        return fallback
+    }
+
     private fun getDefaultVoiceNameForLocale(lang: String, country: String): String {
         val normLang = normaliseLanguage(lang)
         val normCountry = normaliseCountry(country)
@@ -383,6 +448,9 @@ class PiperTtsService : TextToSpeechService() {
         val requestCountry = request.country
         val normLang = if (requestLang != null) normaliseLanguage(requestLang) else null
         val normCountry = normaliseCountry(requestCountry ?: "")
+
+        Log.d(TAG, "Normalised: lang=$normLang country=$normCountry " +
+            "(raw: lang=$requestLang country=$requestCountry)")
 
         // Check if a specific voice was requested by name
         val requestedVoiceName = request.voiceName
