@@ -101,6 +101,14 @@ class PiperTtsService : TextToSpeechService() {
     private var engine: PiperEngine? = null
     private var currentLocale: Locale = Locale.US
     private var currentVoiceName: String? = null
+    /**
+     * Tracks the locale that was actually loaded into the engine (model on disk).
+     * This may differ from [currentLocale] which is updated optimistically by
+     * onLoadLanguage (without loading the model) to satisfy Android framework probing.
+     */
+    private var loadedLocale: Locale? = null
+    /** Tracks the voice name that was actually loaded into the engine. */
+    private var loadedVoiceName: String? = null
     private lateinit var voiceManager: VoiceManager
     private lateinit var voicePreferences: VoicePreferences
 
@@ -209,7 +217,7 @@ class PiperTtsService : TextToSpeechService() {
     override fun onLoadVoice(voiceName: String?): Int {
         if (voiceName == null) return TextToSpeech.ERROR
 
-        Log.i(TAG, "onLoadVoice: $voiceName")
+        Log.i(TAG, "onLoadVoice: $voiceName (current loaded=$loadedVoiceName)")
 
         try {
             val voiceData = voiceManager.loadVoiceByName(voiceName)
@@ -218,6 +226,9 @@ class PiperTtsService : TextToSpeechService() {
                 engine = PiperEngine(voiceData.config, voiceData.modelBytes)
                 currentLocale = voiceData.locale
                 currentVoiceName = voiceName
+                loadedLocale = voiceData.locale
+                loadedVoiceName = voiceName
+                Log.i(TAG, "onLoadVoice: loaded $voiceName (locale=${voiceData.locale})")
                 return TextToSpeech.SUCCESS
             }
         } catch (e: Exception) {
@@ -227,9 +238,9 @@ class PiperTtsService : TextToSpeechService() {
         // If voice not found, it may be a placeholder name (e.g. "en-us-default").
         // Return SUCCESS anyway so Android doesn't mark the engine as broken.
         // Actual synthesis will handle the missing engine gracefully.
-        // NOTE: Do NOT set currentVoiceName here — if we didn't actually load
-        // the voice, keeping the old name ensures the next request with this
-        // voice name will retry loading instead of being skipped.
+        // NOTE: Do NOT set currentVoiceName/loadedVoiceName here — if we didn't
+        // actually load the voice, keeping the old name ensures the next request
+        // with this voice name will retry loading instead of being skipped.
         Log.i(TAG, "Voice '$voiceName' not found on disk, returning SUCCESS for engine visibility")
         return TextToSpeech.SUCCESS
     }
@@ -344,6 +355,8 @@ class PiperTtsService : TextToSpeechService() {
             engine = PiperEngine(voiceData.config, voiceData.modelBytes)
             currentLocale = locale
             currentVoiceName = voiceData.name
+            loadedLocale = voiceData.locale
+            loadedVoiceName = voiceData.name
             Log.i(TAG, "Loaded voice for locale: $locale (${voiceData.name})")
             return TextToSpeech.LANG_COUNTRY_AVAILABLE
         } catch (e: Exception) {
@@ -359,53 +372,90 @@ class PiperTtsService : TextToSpeechService() {
             return
         }
 
-        Log.d(TAG, "Synthesizing: '${text.take(100)}'")
+        Log.d(TAG, "Synthesizing: '${text.take(100)}' " +
+            "voiceName=${request.voiceName} lang=${request.language} country=${request.country} " +
+            "loadedVoice=$loadedVoiceName loadedLocale=$loadedLocale")
+
+        var needsReload = engine == null
 
         // Check if a specific voice was requested (most reliable signal)
         val requestedVoiceName = request.voiceName
-        if (requestedVoiceName != null && requestedVoiceName != currentVoiceName) {
+        if (requestedVoiceName != null && requestedVoiceName != loadedVoiceName) {
+            Log.d(TAG, "Voice name changed: $loadedVoiceName → $requestedVoiceName, reloading")
             onLoadVoice(requestedVoiceName)
+            needsReload = false // onLoadVoice already loaded it
         }
 
-        // Check if we need to load a different language/country
-        // Compare both language AND country — e.g. switching from en-US to en-GB
-        // must trigger a voice reload even though both are "en".
+        // Check if we need to load a different language/country.
+        // Compare against loadedLocale (the locale of the actually loaded model),
+        // NOT currentLocale (which is set optimistically by onLoadLanguage without
+        // loading the model).
         val requestLang = request.language
         val requestCountry = request.country
-        if (requestLang != null) {
+        if (requestLang != null && !needsReload) {
             val normLang = normaliseLanguage(requestLang)
             val normCountry = normaliseCountry(requestCountry ?: "")
-            val requestLocale = Locale(normLang, normCountry)
-            val languageChanged = requestLocale.language != currentLocale.language
-            val countryChanged = normCountry.isNotEmpty() &&
-                !normCountry.equals(currentLocale.country, ignoreCase = true)
+            val actualLoaded = loadedLocale
+            val languageChanged = actualLoaded == null || normLang != actualLoaded.language
+            val countryChanged = normCountry.isNotEmpty() && actualLoaded != null &&
+                !normCountry.equals(actualLoaded.country, ignoreCase = true)
             if (languageChanged || countryChanged) {
+                Log.d(TAG, "Locale changed: $actualLoaded → $normLang/$normCountry, reloading")
+                val requestLocale = Locale(normLang, normCountry)
                 loadVoiceForLocale(requestLocale)
+                needsReload = false
             }
         }
 
         val currentEngine = engine
-        if (currentEngine == null) {
-            Log.i(TAG, "No engine loaded, loading active voice")
-            try {
-                val voiceData = voiceManager.loadActiveVoice(voicePreferences)
+        if (currentEngine == null || needsReload) {
+            Log.i(TAG, "No engine loaded (or reload needed), loading voice for request")
+
+            // Try to load by requested voice name first, then by locale, then active voice
+            var loaded = false
+            if (requestedVoiceName != null) {
+                val voiceData = voiceManager.loadVoiceByName(requestedVoiceName)
                 if (voiceData != null) {
+                    engine?.close()
                     engine = PiperEngine(voiceData.config, voiceData.modelBytes)
                     currentLocale = voiceData.locale
-                    currentVoiceName = voiceData.name
-                    Log.i(TAG, "Lazily loaded active voice: ${voiceData.name}")
-                } else {
-                    // No voice installed — return silence
-                    Log.w(TAG, "No voice models installed yet, returning silence")
+                    currentVoiceName = requestedVoiceName
+                    loadedLocale = voiceData.locale
+                    loadedVoiceName = requestedVoiceName
+                    loaded = true
+                    Log.i(TAG, "Loaded voice by name: $requestedVoiceName")
+                }
+            }
+            if (!loaded && requestLang != null) {
+                val normLang = normaliseLanguage(requestLang)
+                val normCountry = normaliseCountry(requestCountry ?: "")
+                val result = loadVoiceForLocale(Locale(normLang, normCountry))
+                loaded = result != TextToSpeech.LANG_NOT_SUPPORTED
+            }
+            if (!loaded) {
+                try {
+                    val voiceData = voiceManager.loadActiveVoice(voicePreferences)
+                    if (voiceData != null) {
+                        engine?.close()
+                        engine = PiperEngine(voiceData.config, voiceData.modelBytes)
+                        currentLocale = voiceData.locale
+                        currentVoiceName = voiceData.name
+                        loadedLocale = voiceData.locale
+                        loadedVoiceName = voiceData.name
+                        Log.i(TAG, "Lazily loaded active voice: ${voiceData.name}")
+                    } else {
+                        // No voice installed — return silence
+                        Log.w(TAG, "No voice models installed yet, returning silence")
+                        callback.start(22050, AudioFormat.ENCODING_PCM_16BIT, 1)
+                        callback.done()
+                        return
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to load voice, returning silence", e)
                     callback.start(22050, AudioFormat.ENCODING_PCM_16BIT, 1)
                     callback.done()
                     return
                 }
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to load voice, returning silence", e)
-                callback.start(22050, AudioFormat.ENCODING_PCM_16BIT, 1)
-                callback.done()
-                return
             }
         }
 
