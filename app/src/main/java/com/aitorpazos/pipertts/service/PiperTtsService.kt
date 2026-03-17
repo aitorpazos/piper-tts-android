@@ -378,29 +378,36 @@ class PiperTtsService : TextToSpeechService() {
 
         var needsReload = engine == null
 
-        // Check if a specific voice was requested (most reliable signal)
+        // Normalise request language/country once for all checks below
+        val requestLang = request.language
+        val requestCountry = request.country
+        val normLang = if (requestLang != null) normaliseLanguage(requestLang) else null
+        val normCountry = normaliseCountry(requestCountry ?: "")
+
+        // Check if a specific voice was requested by name
         val requestedVoiceName = request.voiceName
         if (requestedVoiceName != null && requestedVoiceName != loadedVoiceName) {
             Log.d(TAG, "Voice name changed: $loadedVoiceName → $requestedVoiceName, reloading")
             onLoadVoice(requestedVoiceName)
-            needsReload = false // onLoadVoice already loaded it
+            needsReload = false // onLoadVoice already loaded it (or failed gracefully)
         }
 
-        // Check if we need to load a different language/country.
-        // Compare against loadedLocale (the locale of the actually loaded model),
-        // NOT currentLocale (which is set optimistically by onLoadLanguage without
-        // loading the model).
-        val requestLang = request.language
-        val requestCountry = request.country
-        if (requestLang != null && !needsReload) {
-            val normLang = normaliseLanguage(requestLang)
-            val normCountry = normaliseCountry(requestCountry ?: "")
+        // ALWAYS verify the loaded model's language matches the request language.
+        // This catches several edge cases:
+        //  - onLoadVoice loaded a voice but it's the wrong language (stale voiceName
+        //    from a previous setVoice call cached by the Android framework)
+        //  - onLoadVoice failed silently (voice not found on disk) and the old model
+        //    is still loaded with a different language
+        //  - Only setLanguage was called (no setVoice), so voiceName is null but
+        //    the request language differs from what's loaded
+        if (normLang != null) {
             val actualLoaded = loadedLocale
-            val languageChanged = actualLoaded == null || normLang != actualLoaded.language
-            val countryChanged = normCountry.isNotEmpty() && actualLoaded != null &&
+            val languageMismatch = actualLoaded == null || normLang != actualLoaded.language
+            val countryMismatch = normCountry.isNotEmpty() && actualLoaded != null &&
                 !normCountry.equals(actualLoaded.country, ignoreCase = true)
-            if (languageChanged || countryChanged) {
-                Log.d(TAG, "Locale changed: $actualLoaded → $normLang/$normCountry, reloading")
+            if (languageMismatch || countryMismatch) {
+                Log.d(TAG, "Language mismatch after voice check: loaded=$actualLoaded " +
+                    "requested=$normLang/$normCountry, reloading by locale")
                 val requestLocale = Locale(normLang, normCountry)
                 loadVoiceForLocale(requestLocale)
                 needsReload = false
@@ -426,9 +433,7 @@ class PiperTtsService : TextToSpeechService() {
                     Log.i(TAG, "Loaded voice by name: $requestedVoiceName")
                 }
             }
-            if (!loaded && requestLang != null) {
-                val normLang = normaliseLanguage(requestLang)
-                val normCountry = normaliseCountry(requestCountry ?: "")
+            if (!loaded && normLang != null) {
                 val result = loadVoiceForLocale(Locale(normLang, normCountry))
                 loaded = result != TextToSpeech.LANG_NOT_SUPPORTED
             }

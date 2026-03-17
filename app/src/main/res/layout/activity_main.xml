@@ -281,6 +281,17 @@
 
         </com.google.android.material.card.MaterialCardView>
 
+        <!-- Version info -->
+        <TextView
+            android:id="@+id/tvVersionInfo"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:layout_marginBottom="8dp"
+            android:gravity="center"
+            android:textColor="?android:textColorHint"
+            android:textSize="12sp" />
+
     </LinearLayout>
 
 </ScrollView>
