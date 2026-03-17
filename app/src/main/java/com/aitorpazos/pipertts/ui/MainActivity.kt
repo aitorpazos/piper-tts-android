@@ -31,6 +31,7 @@ import androidx.core.content.FileProvider
 import androidx.lifecycle.lifecycleScope
 import com.aitorpazos.pipertts.R
 import com.aitorpazos.pipertts.databinding.ActivityMainBinding
+import com.aitorpazos.pipertts.engine.EspeakNative
 import com.aitorpazos.pipertts.engine.PiperEngine
 import com.aitorpazos.pipertts.util.VoiceManager
 import com.aitorpazos.pipertts.util.VoicePreferences
@@ -61,6 +62,9 @@ class MainActivity : AppCompatActivity() {
 
         voiceManager = VoiceManager(this)
         voicePreferences = VoicePreferences(this)
+
+        // Initialize eSpeak-ng for IPA phonemization (required by all standard Piper voices)
+        EspeakNative.initialize(this)
 
         // === Installed Voices section ===
         binding.btnManageVoices.setOnClickListener {

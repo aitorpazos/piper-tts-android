@@ -25,6 +25,7 @@ import android.speech.tts.TextToSpeech
 import android.speech.tts.TextToSpeechService
 import android.speech.tts.Voice
 import android.util.Log
+import com.aitorpazos.pipertts.engine.EspeakNative
 import com.aitorpazos.pipertts.engine.PiperEngine
 import com.aitorpazos.pipertts.util.VoiceManager
 import com.aitorpazos.pipertts.util.VoicePreferences
@@ -123,6 +124,12 @@ class PiperTtsService : TextToSpeechService() {
         // Instead, the voice is loaded lazily on first synthesis (which runs
         // on a binder thread, not the main thread).
         Log.i(TAG, "Service ready — voice will be loaded on first synthesis request")
+
+        // Initialize eSpeak-ng for IPA phonemization (required by all standard Piper voices).
+        // This extracts ~25MB of data files from assets on first run and initializes the
+        // native library. Subsequent starts are fast (version check only).
+        val espeakOk = EspeakNative.initialize(this)
+        Log.i(TAG, "eSpeak-ng initialized: $espeakOk")
     }
 
     /**

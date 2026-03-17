@@ -6,18 +6,37 @@ plugins {
 android {
     namespace = "com.aitorpazos.pipertts"
     compileSdk = 34
+    ndkVersion = "27.0.12077973"
 
     defaultConfig {
         applicationId = "com.aitorpazos.pipertts"
         minSdk = 24
         targetSdk = 34
-        versionCode = 15
-        versionName = "1.12.0"
+        versionCode = 16
+        versionName = "1.13.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
         ndk {
             abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
+        }
+
+        externalNativeBuild {
+            cmake {
+                cppFlags += "-std=c++17"
+                arguments += listOf(
+                    "-DBUILD_SHARED_LIBS=OFF",
+                    "-DUSE_ASYNC=OFF",
+                    "-DUSE_MBROLA=OFF",
+                    "-DUSE_LIBPCAUDIO=OFF",
+                    "-DUSE_LIBSONIC=OFF",
+                    "-DUSE_KLATT=ON",
+                    "-DUSE_SPEECHPLAYER=ON",
+                    "-DCOMPILE_INTONATIONS=OFF",
+                    "-DENABLE_TESTS=OFF",
+                    "-DESPEAK_COMPAT=OFF"
+                )
+            }
         }
     }
 
@@ -65,6 +84,13 @@ android {
         }
         debug {
             isMinifyEnabled = false
+        }
+    }
+
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+            version = "3.22.1"
         }
     }
 

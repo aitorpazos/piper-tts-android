@@ -52,8 +52,13 @@ class PiperEngine(
             setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT)
         }
         session = ortEnv.createSession(modelBytes, sessionOptions)
-        phonemeConverter = PhonemeConverter(config.phonemeIdMap ?: emptyMap())
-        Log.i(TAG, "PiperEngine initialized. Sample rate: ${config.audio.sampleRate}")
+        phonemeConverter = PhonemeConverter(
+            phonemeIdMap = config.phonemeIdMap ?: emptyMap(),
+            phonemeType = config.phonemeType,
+            espeakVoice = config.espeak?.voice
+        )
+        Log.i(TAG, "PiperEngine initialized. Sample rate: ${config.audio.sampleRate}, " +
+            "phonemeType: ${config.phonemeType}, espeakVoice: ${config.espeak?.voice}")
     }
 
     /**

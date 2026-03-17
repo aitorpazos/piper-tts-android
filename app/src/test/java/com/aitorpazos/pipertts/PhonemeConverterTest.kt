@@ -53,6 +53,7 @@ class PhonemeConverterTest {
 
     @Before
     fun setUp() {
+        // Use character mode (no phonemeType / espeakVoice) for unit tests
         converter = PhonemeConverter(testPhonemeIdMap)
     }
 
