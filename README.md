@@ -1,5 +1,7 @@
 # Piper TTS for Android
 
+> **⚠️ Personal project** — This repository is a personal project and is not accepting contributions, issues, or feature requests. You're welcome to fork it and adapt it to your needs.
+
 An open-source Android TTS engine powered by [Piper](https://github.com/rhasspy/piper) — a fast, local, neural text-to-speech system using ONNX Runtime.
 
 ## Features
@@ -37,7 +39,7 @@ An open-source Android TTS engine powered by [Piper](https://github.com/rhasspy/
 
 ```bash
 # Clone
-git clone git@github.com:aitorpazos/piper-tts-android.git
+git clone https://github.com/aitorpazos/piper-tts-android.git
 cd piper-tts-android
 
 # Download a voice model
