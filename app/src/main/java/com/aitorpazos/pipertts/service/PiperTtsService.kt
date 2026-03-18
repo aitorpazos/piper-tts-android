@@ -27,6 +27,7 @@ import android.speech.tts.Voice
 import android.util.Log
 import com.aitorpazos.pipertts.engine.EspeakNative
 import com.aitorpazos.pipertts.engine.PiperEngine
+import com.aitorpazos.pipertts.util.LanguageDetector
 import com.aitorpazos.pipertts.util.VoiceManager
 import com.aitorpazos.pipertts.util.VoicePreferences
 import java.util.Locale
@@ -573,6 +574,21 @@ class PiperTtsService : TextToSpeechService() {
                 effectiveLang = extracted.first
                 effectiveCountry = extracted.second
                 Log.d(TAG, "Extracted lang from request voiceName '${request.voiceName}': $effectiveLang/$effectiveCountry")
+            }
+        }
+
+        // --- Last-resort fallback: auto-detect language from the text itself ---
+        // If no language was specified by any source (direct params, bundle, request),
+        // use Android's TextClassifier (API 29+) to detect the language of the text.
+        // This handles the case where an app calls speak() without setLanguage().
+        if (effectiveLang == null) {
+            val detectedLocale = LanguageDetector.detectLanguage(this, text)
+            if (detectedLocale != null) {
+                effectiveLang = detectedLocale.language
+                effectiveCountry = detectedLocale.country ?: ""
+                Log.i(TAG, "Auto-detected language from text: $effectiveLang/$effectiveCountry")
+            } else {
+                Log.d(TAG, "Language auto-detection returned no result, will use current/default voice")
             }
         }
 
