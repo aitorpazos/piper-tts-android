@@ -520,6 +520,9 @@ class PiperTtsService : TextToSpeechService() {
 
         // --- PRIORITY 1: Direct override params (piper_language / piper_voice_name) ---
         // This is the most reliable path — completely bypasses framework state.
+        // NOTE: Custom Bundle keys may be stripped by the Android TTS framework
+        // during IPC on some Android versions. If piperLang is null, the keys
+        // didn't survive — fall through to the standard path.
         if (piperLang != null || piperVoice != null) {
             Log.i(TAG, "Using DIRECT PARAMS path: piperLang=$piperLang piperCountry=$piperCountry piperVoice=$piperVoice")
             val resolved = resolveVoiceFromDirectParams(piperLang, piperCountry ?: "", piperVoice)
@@ -534,82 +537,102 @@ class PiperTtsService : TextToSpeechService() {
 
         // --- Determine the effective language for this request ---
         //
-        // The Android TTS framework's setLanguage() converts the Locale to
-        // ISO 639-2/T 3-letter codes (e.g. "spa"/"ESP") and then:
-        //   1. Calls isLanguageAvailable("spa", "ESP", "")
-        //   2. Calls getDefaultVoiceNameFor("spa", "ESP", "")
-        //   3. Calls loadVoice(voiceName) 
-        //   4. Calls getVoice(voiceName) — iterates onGetVoices() for name match
+        // The Android TTS framework's language/voice state is complex and unreliable.
+        // After setLanguage() + setVoice(), the framework may have:
+        //   - request.voiceName = correct Piper voice (e.g. "es_ES-davefx-medium")
+        //   - request.language = WRONG (system default, if setLanguage() failed internally)
         //
-        // If step 4 fails (getVoice returns null), setLanguage() returns
-        // LANG_NOT_SUPPORTED and does NOT update mParams. The old language
-        // (from system TTS settings) remains, and that's what arrives here.
+        // Or after only setLanguage() (no setVoice()):
+        //   - request.voiceName = system default voice (WRONG)
+        //   - request.language = correct (from setLanguage())
         //
-        // To defend against this, we check multiple sources in priority order:
-        //   1. Custom piper_language param (handled above)
-        //   2. request.voiceName → extract language from Piper voice name format
-        //   3. Bundle "voiceName" → extract language from voice name
-        //   4. Bundle "language" → framework's internal language key
-        //   5. request.language → may be system default if setLanguage() failed
-        //
-        // Source 2 is the KEY fix: if setVoice() succeeded (even if setLanguage()
-        // failed), request.voiceName will be the correct Piper voice name like
-        // "es_ES-davefx-medium", and we can extract "es"/"ES" from it.
+        // Strategy: collect language from ALL sources, then pick the best.
+        // If voice name and request.language agree → high confidence.
+        // If they disagree → trust voice name (more specific, from setVoice()).
 
+        // Collect language from each source
+        var voiceNameLang: String? = null
+        var voiceNameCountry: String? = ""
+        var voiceNameSource: String? = null
+
+        // From request.voiceName
+        if (request.voiceName != null && request.voiceName.isNotEmpty()) {
+            val extracted = extractLocaleFromVoiceName(request.voiceName)
+            if (extracted != null) {
+                voiceNameLang = extracted.first
+                voiceNameCountry = extracted.second
+                voiceNameSource = "request.voiceName='${request.voiceName}'"
+            }
+        }
+        // From bundle voiceName (if request.voiceName didn't yield a result)
+        if (voiceNameLang == null && bundleVoiceName != null && bundleVoiceName.isNotEmpty()) {
+            val extracted = extractLocaleFromVoiceName(bundleVoiceName)
+            if (extracted != null) {
+                voiceNameLang = extracted.first
+                voiceNameCountry = extracted.second
+                voiceNameSource = "bundle.voiceName='$bundleVoiceName'"
+            }
+        }
+
+        var requestLangNorm: String? = null
+        var requestCountryNorm: String? = ""
+        var requestLangSource: String? = null
+
+        // From bundle language key
+        if (bundleLang != null && bundleLang.isNotEmpty()) {
+            requestLangNorm = normaliseLanguage(bundleLang)
+            requestCountryNorm = normaliseCountry(bundleCountry ?: "")
+            requestLangSource = "bundle.language='$bundleLang'"
+        }
+        // From request.language (fallback)
+        val requestLang = request.language
+        val requestCountry = request.country
+        if (requestLangNorm == null && requestLang != null && requestLang.isNotEmpty()) {
+            requestLangNorm = normaliseLanguage(requestLang)
+            requestCountryNorm = normaliseCountry(requestCountry ?: "")
+            requestLangSource = "request.language='$requestLang'"
+        }
+
+        // --- Decision logic ---
         var effectiveLang: String? = null
         var effectiveCountry: String? = ""
         var effectiveSource: String? = null
 
-        // Source 2: Extract language from request.voiceName (most reliable after direct params)
-        // If setVoice() succeeded, this contains the actual Piper voice name
-        if (request.voiceName != null && request.voiceName.isNotEmpty()) {
-            val extracted = extractLocaleFromVoiceName(request.voiceName)
-            if (extracted != null) {
-                effectiveLang = extracted.first
-                effectiveCountry = extracted.second
-                effectiveSource = "request.voiceName='${request.voiceName}'"
-                Log.d(TAG, "Extracted lang from request voiceName '${request.voiceName}': $effectiveLang/$effectiveCountry")
+        if (voiceNameLang != null && requestLangNorm != null) {
+            if (voiceNameLang == requestLangNorm) {
+                // Both agree — high confidence, use voice name (has country too)
+                effectiveLang = voiceNameLang
+                effectiveCountry = voiceNameCountry
+                effectiveSource = "$voiceNameSource (confirmed by $requestLangSource)"
+                Log.d(TAG, "Voice name and request.language AGREE: $effectiveLang/$effectiveCountry")
+            } else {
+                // They DISAGREE — trust the voice name because:
+                //  - setVoice() is more specific than setLanguage()
+                //  - setLanguage() may have reverted to system default
+                //  - The voice name encodes the actual voice that was selected
+                effectiveLang = voiceNameLang
+                effectiveCountry = voiceNameCountry
+                effectiveSource = "$voiceNameSource (OVERRIDES $requestLangSource=$requestLangNorm)"
+                Log.w(TAG, "Voice name ($voiceNameLang) DISAGREES with request.language ($requestLangNorm). " +
+                    "Trusting voice name — request.language may be stale system default.")
             }
-        }
-
-        // Source 3: Extract language from Bundle voiceName
-        if (effectiveLang == null && bundleVoiceName != null && bundleVoiceName.isNotEmpty()) {
-            val extracted = extractLocaleFromVoiceName(bundleVoiceName)
-            if (extracted != null) {
-                effectiveLang = extracted.first
-                effectiveCountry = extracted.second
-                effectiveSource = "bundle.voiceName='$bundleVoiceName'"
-                Log.d(TAG, "Extracted lang from bundle voiceName '$bundleVoiceName': $effectiveLang/$effectiveCountry")
-            }
-        }
-
-        // Source 4: Bundle language key
-        if (effectiveLang == null && bundleLang != null && bundleLang.isNotEmpty()) {
-            effectiveLang = normaliseLanguage(bundleLang)
-            effectiveCountry = normaliseCountry(bundleCountry ?: "")
-            effectiveSource = "bundle.language='$bundleLang'"
-            Log.d(TAG, "Using bundle language: $effectiveLang/$effectiveCountry")
-        }
-
-        // Source 5: request.language (may be system default — least reliable)
-        val requestLang = request.language
-        val requestCountry = request.country
-        if (effectiveLang == null && requestLang != null && requestLang.isNotEmpty()) {
-            effectiveLang = normaliseLanguage(requestLang)
-            effectiveCountry = normaliseCountry(requestCountry ?: "")
-            effectiveSource = "request.language='$requestLang'"
-            Log.d(TAG, "Using request language: $effectiveLang/$effectiveCountry (raw: $requestLang/$requestCountry)")
+        } else if (voiceNameLang != null) {
+            effectiveLang = voiceNameLang
+            effectiveCountry = voiceNameCountry
+            effectiveSource = voiceNameSource
+        } else if (requestLangNorm != null) {
+            effectiveLang = requestLangNorm
+            effectiveCountry = requestCountryNorm
+            effectiveSource = requestLangSource
         }
 
         // --- Last-resort fallback: auto-detect language from the text itself ---
-        // If no language was specified by any source (direct params, bundle, request),
-        // use Android's TextClassifier (API 29+) to detect the language of the text.
-        // This handles the case where an app calls speak() without setLanguage().
         if (effectiveLang == null) {
             val detectedLocale = LanguageDetector.detectLanguage(this, text)
             if (detectedLocale != null) {
                 effectiveLang = detectedLocale.language
                 effectiveCountry = detectedLocale.country ?: ""
+                effectiveSource = "auto-detect"
                 Log.i(TAG, "Auto-detected language from text: $effectiveLang/$effectiveCountry")
             } else {
                 Log.d(TAG, "Language auto-detection returned no result, will use current/default voice")
@@ -619,45 +642,58 @@ class PiperTtsService : TextToSpeechService() {
         val normLang = effectiveLang
         val normCountry = effectiveCountry ?: ""
 
-        Log.i(TAG, "Effective language: lang=$normLang country=$normCountry (source=$effectiveSource)")
+        Log.i(TAG, "EFFECTIVE LANGUAGE: lang=$normLang country=$normCountry (source=$effectiveSource)")
 
-        // Check if a specific voice was requested by name
-        val requestedVoiceName = (request.voiceName ?: bundleVoiceName)?.takeIf { it.isNotEmpty() }
-        if (requestedVoiceName != null && requestedVoiceName != loadedVoiceName) {
-            Log.d(TAG, "Voice name changed: $loadedVoiceName → $requestedVoiceName, reloading")
-            onLoadVoice(requestedVoiceName)
-            needsReload = false // onLoadVoice already loaded it (or failed gracefully)
-        }
+        // --- Load the correct voice model ---
+        // LANGUAGE takes priority over voice name. The voice name from the framework
+        // may be stale (cached from system TTS settings), but the language we resolved
+        // above is the most reliable signal.
+        //
+        // Strategy:
+        //  1. If we have a language → load by locale first
+        //  2. If locale load fails → try voice name
+        //  3. If both fail → load active/default voice
 
-        // ALWAYS verify the loaded model's language matches the request language.
-        // This catches several edge cases:
-        //  - onLoadVoice loaded a voice but it's the wrong language (stale voiceName
-        //    from a previous setVoice call cached by the Android framework)
-        //  - onLoadVoice failed silently (voice not found on disk) and the old model
-        //    is still loaded with a different language
-        //  - Only setLanguage was called (no setVoice), so voiceName is null but
-        //    the request language differs from what's loaded
         if (normLang != null) {
             val actualLoaded = loadedLocale
             val languageMismatch = actualLoaded == null || normLang != actualLoaded.language
             val countryMismatch = normCountry.isNotEmpty() && actualLoaded != null &&
                 !normCountry.equals(actualLoaded.country, ignoreCase = true)
-            if (languageMismatch || countryMismatch) {
-                Log.d(TAG, "Language mismatch after voice check: loaded=$actualLoaded " +
-                    "requested=$normLang/$normCountry, reloading by locale")
+            if (languageMismatch || countryMismatch || engine == null) {
+                Log.d(TAG, "Loading voice for effective language: $normLang/$normCountry " +
+                    "(current loaded=$actualLoaded, engine=${if (engine != null) "active" else "null"})")
                 val requestLocale = Locale(normLang, normCountry)
-                loadVoiceForLocale(requestLocale)
+                val result = loadVoiceForLocale(requestLocale)
+                if (result != TextToSpeech.LANG_NOT_SUPPORTED) {
+                    needsReload = false
+                } else {
+                    Log.w(TAG, "Failed to load voice for locale $normLang/$normCountry")
+                }
+            } else {
+                Log.d(TAG, "Correct language already loaded: $actualLoaded")
                 needsReload = false
             }
+        }
+
+        // If language-based loading didn't work, try voice name
+        val requestedVoiceName = (request.voiceName ?: bundleVoiceName)?.takeIf { it.isNotEmpty() }
+        if (engine == null && requestedVoiceName != null && requestedVoiceName != loadedVoiceName) {
+            Log.d(TAG, "Trying voice name fallback: $requestedVoiceName")
+            onLoadVoice(requestedVoiceName)
+            needsReload = false
         }
 
         val currentEngine = engine
         if (currentEngine == null || needsReload) {
             Log.i(TAG, "No engine loaded (or reload needed), loading voice for request")
 
-            // Try to load by requested voice name first, then by locale, then active voice
+            // Try locale first, then voice name, then active voice
             var loaded = false
-            if (requestedVoiceName != null) {
+            if (!loaded && normLang != null) {
+                val result = loadVoiceForLocale(Locale(normLang, normCountry))
+                loaded = result != TextToSpeech.LANG_NOT_SUPPORTED
+            }
+            if (!loaded && requestedVoiceName != null) {
                 val voiceData = voiceManager.loadVoiceByName(requestedVoiceName)
                 if (voiceData != null) {
                     engine?.close()
@@ -669,10 +705,6 @@ class PiperTtsService : TextToSpeechService() {
                     loaded = true
                     Log.i(TAG, "Loaded voice by name: $requestedVoiceName")
                 }
-            }
-            if (!loaded && normLang != null) {
-                val result = loadVoiceForLocale(Locale(normLang, normCountry))
-                loaded = result != TextToSpeech.LANG_NOT_SUPPORTED
             }
             if (!loaded) {
                 try {
